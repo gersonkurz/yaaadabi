@@ -1,9 +1,11 @@
 # CLAUDE.md
 
 This repo IS the loop: the shared develop→review protocol and roles that
-every wired project imports (see README.md). There is no code to build —
-the deliverables are `protocol.md`, `developer.md`, `reviewer.md`,
-`commands/task.md`, and the README.
+every wired project imports (see README.md). Deliverables: the shared prose
+files (`protocol.md`, `developer.md`, `reviewer.md`, `commands/task.md`,
+README.md) plus `main.go` — the Go wiring tool that configures a repo to
+use them (it copies nothing but the user-level /task command; the shared
+files stay here and are imported by reference).
 
 A change here changes how every wired repo works. Treat edits accordingly:
 keep the shared files repo-agnostic (anything repo-specific belongs in a
@@ -19,9 +21,9 @@ the installed copy does not update itself.
 @C:/Projects/yaaadabi/protocol.md
 
 Loop parameters:
-- Verify: none — prose-only repo; verification is reading every file the
-  change touches plus each file that references it (protocol ↔ roles ↔
-  README must not contradict each other).
+- Verify: `go vet ./... && go test ./...` (the wiring tool), plus reading
+  every prose file the change touches and each file that references it
+  (protocol ↔ roles ↔ README must not contradict each other).
 - Yardstick docs: README.md (especially the field notes — decisions in this
   repo were bought with trial-run failures; don't undo one without a reason
   that beats the original).

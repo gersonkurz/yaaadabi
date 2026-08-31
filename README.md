@@ -29,9 +29,26 @@ reviewer. Codex additionally reads the repo's own AGENTS.md as always.
 1. Clone to `C:\Projects\yaaadabi` — the protocol references
    `C:/Projects/yaaadabi/reviewer.md` by absolute path.
 2. Copy `commands/task.md` to `~/.claude/commands/task.md`.
-3. Requirements: Claude Code, codex-cli ≥ 0.151.0 on PATH.
+3. Requirements: Claude Code, codex-cli ≥ 0.151.0 on PATH; a Go toolchain
+   to build the wiring tool (the built `yaaadabi.exe` is self-contained).
 
-## Wire a repo (per repo, ~2 minutes)
+## Wire a repo (per repo)
+
+The short way — run BY THE HUMAN from a terminal (the permission patch is
+deliberately a human act):
+
+```
+go build -o yaaadabi.exe . && ./yaaadabi.exe -verify "just build && just selftest" -allow "Bash(just:*)" C:/path/to/repo
+```
+
+It merges the loop's permission rules into `.claude/settings.local.json`,
+appends the Review loop block to CLAUDE.md (fill in the remaining
+placeholders), creates an AGENTS.md stub if the repo has none, and installs
+the user-level `/task` command. Idempotent — safe to re-run.
+
+The manual way — the same wiring by hand (plus, which the tool also does:
+ensure the repo has an AGENTS.md for the reviewer, and that
+`commands/task.md` is installed per machine-install step 2):
 
 1. Add to the repo's CLAUDE.md:
 
