@@ -2,6 +2,12 @@
 
 **Yet Another Attempt At Dialogue Between AIs.**
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/logo_dark.png">
+  <source media="(prefers-color-scheme: light)" srcset="assets/logo_light.png">
+  <img alt="yaaadabi logo" src="assets/logo_light.png">
+</picture>
+
 Claude Code writes the code. Codex reviews it. They argue until the reviewer
 approves. You stop being the clipboard between them.
 
