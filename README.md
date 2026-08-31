@@ -38,8 +38,21 @@ The short way — run BY THE HUMAN from a terminal (the permission patch is
 deliberately a human act):
 
 ```
-go build -o yaaadabi.exe . && ./yaaadabi.exe -verify "just build && just selftest" -allow "Bash(just:*)" C:/path/to/repo
+go build -o yaaadabi.exe . && ./yaaadabi.exe C:/path/to/repo
 ```
+
+No flags. The permission rules are a fixed set (codex + git — everything
+else runs under the session's normal permission mode); the Loop parameters
+land as placeholders for you to fill in CLAUDE.md — that part needs thought,
+not arguments.
+
+The tool requires an elevated shell (or `sudo yaaadabi`): an agent must not
+be able to grant itself permissions by running the wirer, and the UAC prompt
+is out-of-process human consent no agent can click. (A CLAUDECODE env check
+refuses agent sessions early with a clearer message, but it is a courtesy,
+not the boundary — an agent can scrub its own environment. Corollary: if you
+run your agent sessions from an elevated terminal, you have dissolved this
+boundary yourself.)
 
 It merges the loop's permission rules into `.claude/settings.local.json`,
 appends the Review loop block to CLAUDE.md (fill in the remaining
@@ -69,11 +82,13 @@ ensure the repo has an AGENTS.md for the reviewer, and that
    ```json
    { "permissions": { "allow": [
      "Bash(codex exec:*)",
-     "Bash(<build command>:*)", "Bash(<test command>:*)",
      "Bash(git add:*)", "Bash(git commit:*)",
      "Bash(git status:*)", "Bash(git diff:*)"
    ] } }
    ```
+
+   (Build/test commands need no rules here in auto mode; add
+   `"Bash(<build command>:*)"` only if your permission mode prompts.)
 
 3. C++ repos whose build needs the MSVC environment: add a `build.cmd`
    that `call`s `VsDevCmd.bat` first, and name it in Verify. (CMake presets

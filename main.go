@@ -5,18 +5,24 @@
 // human act (Claude's auto-mode classifier blocks agents from editing
 // permission files, and this tool is not a way around that).
 //
-// Usage: yaaadabi [-verify "just build && just selftest"] [-allow "Bash(just:*)"]... [dir]
+// Usage: yaaadabi [dir]
+//
+// No flags: the permission rules are a fixed set (codex + git — everything
+// else runs under the session's normal permission mode), and the Loop
+// parameters are written as placeholders because filling them needs human
+// thought, which belongs in CLAUDE.md, not on a command line.
 package main
 
 import (
 	_ "embed"
 	"encoding/json"
-	"flag"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"golang.org/x/sys/windows"
 )
 
 //go:embed commands/task.md
@@ -39,32 +45,35 @@ const loopBlock = `## Review loop
 ` + importLine + `
 
 Loop parameters:
-- Verify: %s
+- Verify: <build command> && <test command>
 - Yardstick docs: <the docs that define "best" for this repo>
 - Review focus: <what this codebase is most at risk of>
 `
 
-type stringList []string
-
-func (s *stringList) String() string     { return strings.Join(*s, ",") }
-func (s *stringList) Set(v string) error { *s = append(*s, v); return nil }
-
 func main() {
-	verify := flag.String("verify", "<build command> && <test command>", "Verify line for the Loop parameters block")
-	var extraAllow stringList
-	flag.Var(&extraAllow, "allow", "extra permission rule (repeatable), e.g. \"Bash(just:*)\"")
-	flag.Parse()
+	// Granting permissions must be a human act, enforced OUT of process:
+	// require elevation, so a non-elevated agent is refused and `sudo
+	// yaaadabi` surfaces a UAC prompt only the human can answer. The
+	// CLAUDECODE check is merely a courtesy fast-fail with a clearer
+	// message — an agent controls its child environment and can scrub the
+	// variable (reviewer-demonstrated), so it is NOT the boundary.
+	if os.Getenv("CLAUDECODE") != "" {
+		fatal("refusing to run inside a Claude Code session — wiring permissions is a human act; run this from your own (elevated) terminal")
+	}
+	if !isElevated() {
+		fatal("administrator required: run from an elevated shell or via `sudo yaaadabi` — the UAC prompt is the out-of-process human consent this tool requires")
+	}
 
 	dir := "."
-	if flag.NArg() > 0 {
-		dir = flag.Arg(0)
+	if len(os.Args) > 1 {
+		dir = os.Args[1]
 	}
 	if fi, err := os.Stat(dir); err != nil || !fi.IsDir() {
 		fatal("not a directory: %s", dir)
 	}
 
-	report(ensureSettings(dir, extraAllow))
-	report(ensureClaudeMD(dir, *verify))
+	report(ensureSettings(dir))
+	report(ensureClaudeMD(dir))
 	report(ensureAgentsMD(dir))
 
 	home, err := os.UserHomeDir()
@@ -81,7 +90,7 @@ func main() {
 
 // ensureSettings merges the loop's permission rules into
 // .claude/settings.local.json, preserving everything already there.
-func ensureSettings(dir string, extra []string) (string, error) {
+func ensureSettings(dir string) (string, error) {
 	path := filepath.Join(dir, ".claude", "settings.local.json")
 	root := map[string]any{}
 	raw, err := os.ReadFile(path)
@@ -121,7 +130,7 @@ func ensureSettings(dir string, extra []string) (string, error) {
 		}
 	}
 	added := 0
-	for _, rule := range append(append([]string{}, baseAllow...), extra...) {
+	for _, rule := range baseAllow {
 		if !have[rule] {
 			allow = append(allow, rule)
 			have[rule] = true
@@ -146,7 +155,7 @@ func ensureSettings(dir string, extra []string) (string, error) {
 }
 
 // ensureClaudeMD appends the Review loop block unless one is already there.
-func ensureClaudeMD(dir, verify string) (string, error) {
+func ensureClaudeMD(dir string) (string, error) {
 	path := filepath.Join(dir, "CLAUDE.md")
 	existing, err := os.ReadFile(path)
 	if err != nil && !os.IsNotExist(err) {
@@ -165,12 +174,11 @@ func ensureClaudeMD(dir, verify string) (string, error) {
 	if found > 0 {
 		return "", fmt.Errorf("%s: partially wired (needs the \"## Review loop\" heading, the protocol import line, and a \"Loop parameters:\" block; found %d of 3) — fix it by hand", path, found)
 	}
-	block := fmt.Sprintf(loopBlock, verify)
 	content := string(existing)
 	if content == "" {
-		content = "# CLAUDE.md\n\n" + block
+		content = "# CLAUDE.md\n\n" + loopBlock
 	} else {
-		content = strings.TrimRight(content, "\n") + "\n\n" + block
+		content = strings.TrimRight(content, "\n") + "\n\n" + loopBlock
 	}
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 		return "", err
@@ -189,6 +197,13 @@ func ensureAgentsMD(dir string) (string, error) {
 		return "", err
 	}
 	return path + ": stub created (points at CLAUDE.md)", nil
+}
+
+// isElevated reports whether the process holds an elevated token, queried
+// in-process from the Windows API — nothing PATH- or env-resolvable to
+// spoof (a subprocess check was reviewer-bypassed with a fake net.exe).
+func isElevated() bool {
+	return windows.GetCurrentProcessToken().IsElevated()
 }
 
 // installTaskCommand writes the embedded /task command to the user-level
