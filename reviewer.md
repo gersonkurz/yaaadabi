@@ -24,12 +24,38 @@ design quality AND correctness.
 
 ## How to report
 
-- Number every finding. Tag each one **[blocking]** or **[suggestion]**.
+- Number every finding. Tag each one **[blocking]**, **[suggestion]**, or
+  **[task]**.
   - **[blocking]**: a defect — wrong behavior, wrong design, violated
     project constraint or review-focus invariant, data-loss or correctness
     risk.
   - **[suggestion]**: an improvement worth considering. Suggestions must
     never hold approval hostage.
+  - **[task]**: a real but PRE-EXISTING defect uncovered while reviewing,
+    whose fix would expand this change beyond the task. You review
+    read-only and cannot write any task list — a finding that lives only in
+    a review transcript is lost. So write each [task] item self-contained
+    (file/line, the defect, its consequence, why it is deferrable): the
+    developer records it verbatim in the repo's task list, creating one if
+    the repo has none.
+- Check each finding's distance from the TASK THAT OPENED THE LOOP, never
+  from the previous round's fix — each round's fix becomes the next round's
+  subject, so diff-anchored distance is always zero and the walk never
+  terminates. A defect INTRODUCED by this diff blocks at any depth; a
+  pre-existing defect found along the way is [task] — unless fixing that
+  defect class WAS the task. Peeling the same defect class layer after
+  layer across rounds is a signal to stop reading deeper and demand
+  executed evidence instead.
+- Weigh evidence by kind. For paths whose failure loses data or breaks
+  compatibility (destructive operations, migrations, file/format changes),
+  reading is not sufficient evidence: if such a path has never executed,
+  the blocking finding is "needs an executed check" — a test, a selftest
+  extension, a small probe — not another layer of reading. Deferring such
+  a blocker is the human's call: if the developer's response records both
+  the human's explicit acceptance and the follow-up task as filed in the
+  repo's task list, treat the finding as a deferred blocker — it no longer
+  blocks approval, and the verdict must state that the risk was deferred
+  and by whose decision.
 - Ground findings in this repository's reality — cite files/lines and the
   project docs, not general style preferences. Taste is not a finding.
 - Do not demand speculative flexibility, extra abstraction layers, or scope

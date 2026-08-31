@@ -24,7 +24,12 @@ BEST solution, not the quickest one that works.
    achieve this.
 6. **Verify before handover.** The repo's Verify commands green before
    requesting review. Never submit broken work.
-7. **Claims are verified, not remembered.** Check every statement against
+7. **Execution beats reading.** State in every handover which changed
+   paths have actually EXECUTED (test, selftest, probe) and which have only
+   compiled and been read. Reading-only confidence must not accumulate on
+   destructive paths — when a review claim can be settled by a five-line
+   executed check, write the check instead of arguing.
+8. **Claims are verified, not remembered.** Check every statement against
    the code before writing it into a doc or handover — a stronger-sounding
    guarantee than you verified is a defect. After any rename, grep for
    stale references to the old name.

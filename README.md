@@ -16,7 +16,7 @@ supply, or a review deadlock (3 rounds without agreement).
 |---|---|
 | `protocol.md` | The review protocol, repo-agnostic. Imported into each repo's CLAUDE.md. |
 | `developer.md` | Shared developer role: best-not-quickest, forced alternatives comparison, reporting discipline. |
-| `reviewer.md` | Shared reviewer role: judges approach AND correctness, [blocking]/[suggestion] tags, `VERDICT:` contract. |
+| `reviewer.md` | Shared reviewer role: judges approach AND correctness, [blocking]/[suggestion]/[task] tags, evidence weighting, `VERDICT:` contract. |
 | `commands/task.md` | The `/task` kickstart command (installed user-level, works in every wired repo). |
 
 Repo-specific knowledge lives in each repo, not here: a short **Loop
@@ -46,9 +46,11 @@ else runs under the session's normal permission mode); the Loop parameters
 land as placeholders for you to fill in CLAUDE.md — that part needs thought,
 not arguments.
 
-The tool requires an elevated shell (or `sudo yaaadabi`): an agent must not
-be able to grant itself permissions by running the wirer, and the UAC prompt
-is out-of-process human consent no agent can click. (A CLAUDECODE env check
+The tool requires an elevated (administrator) shell: an agent must not be
+able to grant itself permissions by running the wirer, and elevation is
+out-of-process human consent no agent can obtain. (Windows sudo is NOT a
+substitute here in practice: without inline mode it opens a new window whose
+output vanishes with it.) (A CLAUDECODE env check
 refuses agent sessions early with a clearer message, but it is a courtesy,
 not the boundary — an agent can scrub its own environment. Corollary: if you
 run your agent sessions from an elevated terminal, you have dissolved this
@@ -115,3 +117,8 @@ start) and kick off with `/task <description>`.
 - `-s read-only` on the reviewer: a user-level codex config default of
   `workspace-write` would otherwise let the reviewer modify the tree
   mid-review.
+- Evidence rule, [task] tag, and the shrink-the-diff circuit breaker come
+  from a 14-round manual session: every round found something real, yet the
+  result was a large, plausible, entirely unexecuted change to destructive
+  paths — the review peeled a defect class layer by layer while the diff
+  grew more invasive. Reading is argument; execution is evidence.

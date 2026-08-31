@@ -16,7 +16,9 @@ instantiate this protocol for the repo.
    (`$TEMP/handover.md` — never in the working tree; the review covers
    untracked files): problem statement, motivation, chosen approach and
    rejected alternatives, what changed (files + why), what was deliberately
-   NOT changed, the review scope stated explicitly (e.g. "review the
+   NOT changed, an evidence statement (which changed paths have actually
+   EXECUTED — test, selftest, probe — and which have only compiled and been
+   read), the review scope stated explicitly (e.g. "review the
    uncommitted diff plus untracked files" — plain `codex exec` is given no
    diff automatically), and the repo's Loop parameters block copied verbatim
    so the reviewer judges against the right yardstick.
@@ -27,10 +29,29 @@ instantiate this protocol for the repo.
    output for ~15 minutes is hung — kill it and resubmit via
    `codex exec resume --last`.
 4. Read the verdict; report it in the conversation, then continue
-   immediately.
+   immediately. Whatever the verdict, first record any [task] findings
+   verbatim in the repo's task list, creating one (`TODO.md` at the repo
+   root) if the repo has none — an APPROVED review can carry tasks too, and
+   a finding that lives only in a review transcript or completion report is
+   lost. This verbatim transcription of the reviewer's own findings is the
+   one tree change permitted between approval and commit — its content was
+   authored by the reviewer, so re-reviewing it adds a round and no
+   information (human-blessed exemption, 2026-08-31).
 5. On NEEDS-WORK: address every [blocking] finding (suggestions at your
    judgment — state what you did with each), or push back with reasons
-   grounded in the project docs. Re-review in the same session:
+   grounded in the project docs; [task] findings are already recorded per
+   step 4 and are NOT acted on in this change. A [blocking]
+   "needs an executed check" finding resolves one of two ways: execute the
+   check, or — with the human's explicit acceptance, obtained via the
+   only-the-human touchpoint — file a follow-up task in the repo's task
+   list (created per step 4 if the repo has none) and state both the
+   acceptance and the filed task in the response;
+   the reviewer then treats it as a deferred blocker. If addressing
+   findings makes the change materially more invasive (a file format, a
+   migration, a new subsystem), stop the loop and hand the split decision
+   to the human — rounds must narrow the change's scope, not expand it;
+   added tests, probes, and executed checks are always in scope, whatever
+   they do to the diff's line count. Re-review in the same session:
    `codex exec resume --last --json -o $TEMP/verdict.md - < $TEMP/response.md`
    (background + heartbeat rules as in step 3)
    After 3 rounds without approval: stop, summarize both positions, hand

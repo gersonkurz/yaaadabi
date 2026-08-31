@@ -52,8 +52,8 @@ Loop parameters:
 
 func main() {
 	// Granting permissions must be a human act, enforced OUT of process:
-	// require elevation, so a non-elevated agent is refused and `sudo
-	// yaaadabi` surfaces a UAC prompt only the human can answer. The
+	// require elevation, so a non-elevated agent is refused while a human
+	// can run it from an elevated shell (UAC consent already given). The
 	// CLAUDECODE check is merely a courtesy fast-fail with a clearer
 	// message — an agent controls its child environment and can scrub the
 	// variable (reviewer-demonstrated), so it is NOT the boundary.
@@ -61,7 +61,7 @@ func main() {
 		fatal("refusing to run inside a Claude Code session — wiring permissions is a human act; run this from your own (elevated) terminal")
 	}
 	if !isElevated() {
-		fatal("administrator required: run from an elevated shell or via `sudo yaaadabi` — the UAC prompt is the out-of-process human consent this tool requires")
+		fatal("administrator required: run this from an elevated (administrator) shell — elevation is the out-of-process human consent this tool requires")
 	}
 
 	dir := "."
