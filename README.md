@@ -35,7 +35,9 @@ approves. You stop being the clipboard between them.
    `[blocking]` / `[suggestion]` / `[task]`, ends with `VERDICT: APPROVED`
    or `VERDICT: NEEDS-WORK`.
 5. NEEDS-WORK → fix, re-review in the same Codex session. Three rounds
-   without agreement → both positions land on your desk.
+   without agreement → both positions land on your desk. Only a review that
+   keeps finding new defects, each accepted and each fix holding, goes on
+   past three; five rounds stops regardless.
 6. APPROVED → final build + tests, commit, report: task, rounds, verdict,
    hash.
 
@@ -79,7 +81,10 @@ Loop parameters:
 - Review focus: C++ lifetime/UB, cross-platform Windows+macOS
 ```
 
-`Verify` = the commands that must be green before and after review.
+`Verify` = the commands that must be green before and after review, in the
+form whose tests actually execute — name the variant that defeats the test
+runner's result cache (`go test -count=1 ./...`, not `go test ./...`),
+because a replayed green is not evidence. Compilation caches are fine.
 `Yardstick docs` = what defines "best" in this repo. `Review focus` = what
 this codebase is most at risk of. C++ repos whose build needs the MSVC
 environment: add a `build.cmd` that `call`s `VsDevCmd.bat` first and name
@@ -137,3 +142,41 @@ reason that beats the original.
   Reading is argument; execution is evidence. Findings drift is measured
   from the ticket that opened the loop, never from the previous round's
   fix, and deferred findings go in a task list a transcript can't swallow.
+- **Verify must execute, not hit the cache**: a developer reported a green
+  suite three times; `go test` had served cached results for the very
+  package the change touched, and `-count=1` surfaced two more failures at
+  once, one of them a port the change had broken. The reviewer's read-only
+  sandbox could not run the tests either, so nobody had tested the change
+  while both parties believed somebody had. The handover now states the
+  exact Verify command and that its tests ran rather than being replayed;
+  the reviewer treats a Verify claim without that statement as unverified.
+  The rule is about test results, not compilation: a build cache that
+  rebuilds what changed still runs the code, a test cache that replays a
+  result does not.
+- **The task list is whatever the repo names; `TODO.md` is only the
+  default**: a repo migrated its findings into a JIRA epic and deleted
+  `TODO.md`; the protocol's hardcoded filename would have recreated it on
+  the next round. The post-approval "one tree change" exemption exists for
+  a list that is a file — filing a ticket touches no tree.
+- **A check that cannot run is said so, never implied**: `go test -race`
+  needs cgo, the machine had no C toolchain, and the human declined
+  installing one. Neither "execute it" nor "defer it" fit. The resolution
+  was to make the property statically checkable (remove the racing write,
+  not synchronise it), argue it structurally, and state plainly that the
+  detector never ran. The temptation under a [blocking] finding is to be
+  vague about what actually executed — the protocol names that clause as
+  the load-bearing one.
+- **Deadlock brake vs. convergence**: a four-round change accepted every
+  finding, each round a new, real defect (the last a cash-loss path), and
+  the 3-round brake fired on a loop that was visibly working — "summarize
+  both positions" with no positions to summarize. Disagreement still stops
+  at three; only a review whose every finding was accepted and whose every
+  fix held continues, with a report, and it stops at five regardless — a
+  limit that is easy to talk past is worth less than a blunt one. Both
+  stops are the "review deadlock" touchpoint: a review that will not close.
+- **Unfilled Loop parameters have defined behaviour**: an agent met the
+  template placeholders verbatim in a wired repo, resolved them from the
+  rest of CLAUDE.md and copied both into the handover. It worked, but it
+  was an invented convention; the protocol now prescribes exactly that, so
+  every agent follows the same procedure and the reviewer sees what was
+  assumed. A line the docs do not settle goes to the human.

@@ -45,7 +45,7 @@ const loopBlock = `## Review loop
 ` + importLine + `
 
 Loop parameters:
-- Verify: <build command> && <test command>
+- Verify: <build command> && <uncached test command>
 - Yardstick docs: <the docs that define "best" for this repo>
 - Review focus: <what this codebase is most at risk of>
 `

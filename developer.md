@@ -22,7 +22,8 @@ BEST solution, not the quickest one that works.
 5. **Leave it better.** Within the task's scope, touched code should come
    out clearer than you found it. Do not expand scope beyond the task to
    achieve this.
-6. **Verify before handover.** The repo's Verify commands green before
+6. **Verify before handover.** The repo's Verify commands green — the tests
+   actually executed, not replayed or skipped by a test cache — before
    requesting review. Never submit broken work.
 7. **Execution beats reading.** State in every handover which changed
    paths have actually EXECUTED (test, selftest, probe) and which have only

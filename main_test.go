@@ -107,7 +107,7 @@ func TestEnsureClaudeMDAppendsOnceAndCreates(t *testing.T) {
 	}
 	raw, _ := os.ReadFile(filepath.Join(dir, "CLAUDE.md"))
 	s := string(raw)
-	if !strings.HasPrefix(s, "# Existing") || strings.Count(s, importLine) != 1 || !strings.Contains(s, "- Verify: <build command> && <test command>") {
+	if !strings.HasPrefix(s, "# Existing") || strings.Count(s, importLine) != 1 || !strings.Contains(s, "- Verify: <build command> && <uncached test command>") {
 		t.Fatalf("unexpected CLAUDE.md content:\n%s", s)
 	}
 

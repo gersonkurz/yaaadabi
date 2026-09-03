@@ -21,7 +21,7 @@ the installed copy does not update itself.
 @C:/Projects/yaaadabi/protocol.md
 
 Loop parameters:
-- Verify: `go vet ./... && go test ./...` (the wiring tool), plus reading
+- Verify: `go vet ./... && go test -count=1 ./...` (the wiring tool), plus reading
   every prose file the change touches and each file that references it
   (protocol ↔ roles ↔ README must not contradict each other).
 - Yardstick docs: README.md (especially the field notes — decisions in this

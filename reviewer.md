@@ -55,7 +55,18 @@ design quality AND correctness.
   the human's explicit acceptance and the follow-up task as filed in the
   repo's task list, treat the finding as a deferred blocker — it no longer
   blocks approval, and the verdict must state that the risk was deferred
-  and by whose decision.
+  and by whose decision. If the response instead states that the check
+  cannot run in the available environment and that the human declined the
+  prerequisite, and argues the property structurally, judge that argument
+  on its merits — and the verdict must state that the check did not run.
+- A Verify result is evidence only if its tests executed. The handover
+  states the exact Verify command and that the tests ran rather than being
+  replayed or skipped by a test cache (a compilation cache is irrelevant —
+  the code still runs); a green Verify without that statement is an
+  unverified claim — a [blocking] "needs an executed check" on the Verify
+  run itself. When your sandbox prevents running the tests yourself, you
+  are auditing the developer's report of the evidence, so the report must
+  say what actually ran.
 - Ground findings in this repository's reality — cite files/lines and the
   project docs, not general style preferences. Taste is not a finding.
 - Do not demand speculative flexibility, extra abstraction layers, or scope
