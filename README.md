@@ -134,6 +134,7 @@ exists.
 | `reviewer.md` | Reviewer role: judges approach AND correctness, `[blocking]`/`[suggestion]`/`[task]` tags, evidence weighting, `VERDICT:` contract. |
 | `commands/task.md` | The `/task` kickstart command (installed user-level, works in every wired repo). |
 | `main.go` | The wiring tool. Zero flags, elevation-gated, idempotent. |
+| `AGENTS.md` | Codex's entry point here, pointing at CLAUDE.md — the same stub the wiring tool writes into a repo that has none. |
 
 Repo-specific knowledge lives in each repo, not here: the Loop parameters
 block in its CLAUDE.md, which the protocol reads and every handover copies
@@ -168,9 +169,22 @@ reason that beats the original.
   of the wrong review. The thread id is the first line of the JSONL
   stream (`{"type":"thread.started","thread_id":"..."}`), which is why
   step 3 redirects that stream to a file.
-- **`-s read-only` on the reviewer**: a user-level codex config default of
-  `workspace-write` would otherwise let the reviewer modify the tree
-  mid-review.
+- **Read-only reviewer = TWO settings, re-stated every round**: a sandbox
+  alone is not a boundary. Pinning `read-only` and leaving the approval
+  policy to the user's config was probed on identical prompts: with
+  `approval_policy="on-request"` the reviewer's write was denied, it
+  escalated, retried, and the file appeared in the working tree; with
+  `approval_policy="never"` the same write was denied and stayed denied.
+  The sandbox decides what is blocked, the approval policy decides whether
+  the agent may climb over the block — so every review command pins both,
+  and the loop stops depending on whatever `~/.codex/config.toml` says.
+  Spelling differs by command: a fresh `codex exec` takes `-s read-only`,
+  while `codex exec resume` has no `-s` at all (`error: unexpected argument
+  '-s' found`) and needs `-c sandbox_mode="read-only"`. Both must be
+  repeated on each resumed round, because a resumed turn runs under the new
+  invocation's settings, not the ones its thread started with. Found by a
+  reviewer noticing the resume command had never carried either: rounds 2+
+  of every review had been running writable, contradicting this very note.
 - **Elevation, not environment checks, as the consent boundary**: a
   `CLAUDECODE` env guard and a `net session` subprocess check were both
   bypassed by the reviewer itself (scrubbed variable; fake `net.exe` on

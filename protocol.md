@@ -53,7 +53,13 @@ relative to the scratch directory does not resolve.
    so the reviewer judges against the right yardstick.
 3. Submit as a BACKGROUND task — reviews routinely exceed 10 minutes; never
    wait in the foreground:
-   `cat C:/Projects/yaaadabi/reviewer.md $SCRATCH/handover.md | codex exec -s read-only --json -o $SCRATCH/verdict.md - > $SCRATCH/review.jsonl`
+   `cat C:/Projects/yaaadabi/reviewer.md $SCRATCH/handover.md | codex exec -s read-only -c approval_policy="never" --json -o $SCRATCH/verdict.md - > $SCRATCH/review.jsonl`
+   Both settings are load-bearing, and neither substitutes for the other:
+   the sandbox blocks a write, the approval policy decides whether the
+   reviewer may escalate past that block. With only the sandbox pinned, a
+   user config that permits escalation lets the reviewer retry the denied
+   write with elevated permissions and succeed. Pin them on every review
+   command, so the loop does not depend on the reviewer's own config.
    The redirect matters: that JSONL event stream is both the heartbeat and
    the only place the reviewer's thread id appears — its first line is
    `{"type":"thread.started","thread_id":"<uuid>"}`. Keep that id; step 5
@@ -96,10 +102,15 @@ relative to the scratch directory does not resolve.
    to the human — rounds must narrow the change's scope, not expand it;
    added tests, probes, and executed checks are always in scope, whatever
    they do to the diff's line count. Re-review in the same session:
-   `codex exec resume <thread_id> --json -o $SCRATCH/verdict.md - < $SCRATCH/response.md >> $SCRATCH/review.jsonl`
-   — the id kept from step 3, never `--last`: `--last` resolves to the
-   newest recorded session for the working directory, so a second session
-   reviewing the same repo silently hijacks this one's reviewer thread.
+   `codex exec resume <thread_id> -c sandbox_mode="read-only" -c approval_policy="never" --json -o $SCRATCH/verdict.md - < $SCRATCH/response.md >> $SCRATCH/review.jsonl`
+   — both of step 3's settings must be re-stated on every resumed round,
+   and the sandbox in this form: a resumed turn takes the sandbox and
+   approval policy of the new invocation, not the ones the thread started
+   with, and `codex exec resume` has no `-s` (it fails with
+   `error: unexpected argument '-s' found`). The id is the one kept from
+   step 3, never `--last`: `--last` resolves to the newest recorded session
+   for the working directory, so a second session reviewing the same repo
+   silently hijacks this one's reviewer thread.
    (background + heartbeat rules as in step 3)
    After 3 rounds without approval, continue only on convergence: every
    [blocking] finding so far was accepted and none has come back — each
