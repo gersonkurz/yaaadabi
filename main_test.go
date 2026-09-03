@@ -110,6 +110,12 @@ func TestEnsureClaudeMDAppendsOnceAndCreates(t *testing.T) {
 	if !strings.HasPrefix(s, "# Existing") || strings.Count(s, importLine) != 1 || !strings.Contains(s, "- Verify: <build command> && <uncached test command>") {
 		t.Fatalf("unexpected CLAUDE.md content:\n%s", s)
 	}
+	// Every parameter the protocol names must have a line to fill in.
+	for _, param := range []string{"- Verify:", "- Yardstick docs:", "- Review focus:", "- Task list:"} {
+		if !strings.Contains(s, param) {
+			t.Errorf("Loop parameters block lacks %q", param)
+		}
+	}
 
 	// Missing CLAUDE.md gets created.
 	dir2 := t.TempDir()

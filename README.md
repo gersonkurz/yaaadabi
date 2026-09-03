@@ -19,8 +19,8 @@ approves. You stop being the clipboard between them.
   starts, something only you can supply, or a review deadlock. Everything
   else, including the commit, is automatic.
 - **Adopt a repo**: run `yaaadabi.exe C:/path/to/repo` from an elevated
-  shell, fill in two placeholder lines, start a fresh session, type
-  `/task <what you want>`.
+  shell, fill in the Loop parameters it leaves in CLAUDE.md, start a fresh
+  session, type `/task <what you want>`.
 - **Cost**: no server, no daemon, no config files. One shared git clone,
   a few lines in each repo's CLAUDE.md.
 
@@ -72,13 +72,14 @@ The tool merges the loop's permission rules into
 `.claude/settings.local.json`, appends a `## Review loop` block to
 CLAUDE.md, creates an AGENTS.md stub if the repo has none, and installs the
 user-level `/task` command. Idempotent — safe to re-run. Then fill in the
-two `<placeholder>` lines it leaves in CLAUDE.md:
+`<placeholder>` lines it leaves in CLAUDE.md:
 
 ```markdown
 Loop parameters:
 - Verify: just build && just selftest
 - Yardstick docs: docs/ROADMAP.md, tasks.md
 - Review focus: C++ lifetime/UB, cross-platform Windows+macOS
+- Task list: JIRA project ACME — file each [task] finding as an issue
 ```
 
 `Verify` = the commands that must be green before and after review, in the
@@ -86,13 +87,43 @@ form whose tests actually execute — name the variant that defeats the test
 runner's result cache (`go test -count=1 ./...`, not `go test ./...`),
 because a replayed green is not evidence. Compilation caches are fine.
 `Yardstick docs` = what defines "best" in this repo. `Review focus` = what
-this codebase is most at risk of. C++ repos whose build needs the MSVC
-environment: add a `build.cmd` that `call`s `VsDevCmd.bat` first and name
-it in Verify (CMake presets pinning a Visual Studio generator don't need
-this — CMake locates the toolchain itself).
+this codebase is most at risk of. `Task list` = where deferred `[task]`
+findings go; delete the line and they go to `TODO.md` at the repo root. C++
+repos whose build needs the MSVC environment: add a `build.cmd` that
+`call`s `VsDevCmd.bat` first and name it in Verify (CMake presets pinning
+a Visual Studio generator don't need this — CMake locates the toolchain
+itself).
 
 Start a **fresh** session (not `/resume` — the protocol loads at session
 start) and kick off with `/task <description>`.
+
+## Local conventions across several repos
+
+Conventions shared by a group of your repos but nobody else's — a tracker
+all of them file into, a house commit style — do not belong in this repo,
+and repeating them in every CLAUDE.md rots. Put them in one file outside
+every project and import it next to the protocol:
+
+```markdown
+## Review loop
+
+@C:/Projects/yaaadabi/protocol.md
+@C:/Projects/acme-conventions.md
+
+Loop parameters:
+- Verify: just build && just selftest
+- Yardstick docs: docs/ROADMAP.md, tasks.md
+- Review focus: C++ lifetime/UB, cross-platform Windows+macOS
+```
+
+The imported file supplies Loop parameters lines like any other — here a
+`Task list` naming your tracker, so no wired repo needs a `TODO.md`. Any line
+can travel that way; in this example only `Task list` does, because `Verify`,
+`Yardstick docs` and `Review focus` differ per repo, so there is nothing to
+share. Precedence: a line the repo states itself wins over the imported
+default, so a shared default is worth setting even where one repo differs.
+The file is yours, stays out of every repo, and this repo never learns it
+exists.
 
 ## What's in the box
 
@@ -120,12 +151,23 @@ reason that beats the original.
   `codex exec` with the scope stated in the prompt honors the contract
   exactly.
 - **Background always, `--json` as heartbeat**: reviews routinely exceed
-  10 minutes; no output for ~15 minutes = hung → kill,
-  `codex exec resume --last`.
-- **Scratch files in `$TEMP`, never the working tree**: the review scope
-  includes untracked files.
-- **Round 2+ via `codex exec resume --last`**: the reviewer keeps context
-  and verifies its own findings were addressed.
+  10 minutes; no output for ~15 minutes = hung → kill and re-run the exact
+  command that hung, verbatim. Not a promptless `codex exec resume` as the
+  recovery: it is rejected outright, and a hung first round has no verdict
+  to respond to anyway.
+- **Scratch files outside the working tree, in a per-session directory**:
+  the review scope includes untracked files, so nothing may land in the
+  repo — and `$TEMP/handover.md` is shared by every session on the machine,
+  so two concurrent loops would overwrite each other's handover and verdict.
+  Each session writes into the scratchpad directory Claude Code gives it.
+- **Round 2+ via `codex exec resume <thread_id>`, never `--last`**: the
+  reviewer keeps context and verifies its own findings were addressed —
+  but `--last` means "newest recorded session for this working directory",
+  so a second session reviewing the same repo silently takes over the
+  first one's reviewer thread, and both get a coherent-looking transcript
+  of the wrong review. The thread id is the first line of the JSONL
+  stream (`{"type":"thread.started","thread_id":"..."}`), which is why
+  step 3 redirects that stream to a file.
 - **`-s read-only` on the reviewer**: a user-level codex config default of
   `workspace-write` would otherwise let the reviewer modify the tree
   mid-review.
@@ -174,6 +216,13 @@ reason that beats the original.
   fix held continues, with a report, and it stops at five regardless — a
   limit that is easy to talk past is worth less than a blunt one. Both
   stops are the "review deadlock" touchpoint: a review that will not close.
+- **Local conventions are an import, not a feature**: "all our repos file
+  findings in JIRA" is real, and it must not leak into a repo published
+  for everyone. CLAUDE.md imports already solve it — a private file next
+  to the protocol import, supplying Loop parameters lines. What was
+  missing was a named parameter to answer: `Task list` exists so a
+  convention file can set it, instead of each agent re-deriving the task
+  list from the repo's prose.
 - **Unfilled Loop parameters have defined behaviour**: an agent met the
   template placeholders verbatim in a wired repo, resolved them from the
   rest of CLAUDE.md and copied both into the handover. It worked, but it

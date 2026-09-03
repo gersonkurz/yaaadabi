@@ -48,6 +48,7 @@ Loop parameters:
 - Verify: <build command> && <uncached test command>
 - Yardstick docs: <the docs that define "best" for this repo>
 - Review focus: <what this codebase is most at risk of>
+- Task list: <where [task] findings go — omit this line for TODO.md at the repo root>
 `
 
 func main() {

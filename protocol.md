@@ -8,12 +8,27 @@ can supply, or a review deadlock (a review that will not close — defined in
 step 5).
 
 The repository's CLAUDE.md declares a **Loop parameters** block: the Verify
-commands, the yardstick docs, and the review focus. Those parameters
-instantiate this protocol for the repo. If the block is still the unfilled
-template, resolve each line from the repo's own docs and state that
-resolution verbatim in the handover, so the reviewer judges against a stated
-yardstick, not an assumed one. A line the repo's docs do not settle is
-something only the human can supply — ask.
+commands, the yardstick docs, the review focus, and optionally the task list
+(step 4). Those parameters instantiate this protocol for the repo. A line may
+reach CLAUDE.md through a file it imports rather than written inline — the
+same thing, except that a value stated in the repo's own block wins over an
+imported default. If the block is still the unfilled template, resolve each
+line from the repo's own docs and state that resolution verbatim in the
+handover, so the reviewer judges against a stated yardstick, not an assumed
+one. A line the repo's docs do not settle is something only the human can
+supply — ask; `Task list` is the exception, because step 4 defines its
+default.
+
+Every scratch file this loop writes — handover, verdict, response, the
+reviewer's event log — goes in a scratch directory OUTSIDE the repo that is
+unique to THIS session, `$SCRATCH` below. Claude Code names a per-session
+scratchpad directory in the session's environment; use that one. If the
+environment names none, create one once (`mktemp -d`) and reuse it for the
+whole task. Never a fixed path such as `$TEMP/handover.md`: concurrent
+sessions share `$TEMP`, and two of them would overwrite each other's handover
+and verdict. Keep the paths absolute — `codex exec` runs with the repo as its
+working directory (it refuses to run outside a trusted directory), so a path
+relative to the scratch directory does not resolve.
 
 1. Implement, then verify: run the Verify commands from Loop parameters —
    all green before requesting review. The tests and checks must actually
@@ -25,7 +40,7 @@ something only the human can supply — ask.
    that rebuilds what changed (Go's build cache, ccache) is fine — the code
    still runs; only replayed or skipped test/check results are excluded.
 2. Write a numbered handover to a scratch file OUTSIDE the repo
-   (`$TEMP/handover.md` — never in the working tree; the review covers
+   (`$SCRATCH/handover.md` — never in the working tree; the review covers
    untracked files): problem statement, motivation, chosen approach and
    rejected alternatives, what changed (files + why), what was deliberately
    NOT changed, an evidence statement (which changed paths have actually
@@ -38,22 +53,31 @@ something only the human can supply — ask.
    so the reviewer judges against the right yardstick.
 3. Submit as a BACKGROUND task — reviews routinely exceed 10 minutes; never
    wait in the foreground:
-   `cat C:/Projects/yaaadabi/reviewer.md $TEMP/handover.md | codex exec -s read-only --json -o $TEMP/verdict.md -`
-   The JSONL event stream is the heartbeat: a running review with no new
-   output for ~15 minutes is hung — kill it and resubmit via
-   `codex exec resume --last`.
+   `cat C:/Projects/yaaadabi/reviewer.md $SCRATCH/handover.md | codex exec -s read-only --json -o $SCRATCH/verdict.md - > $SCRATCH/review.jsonl`
+   The redirect matters: that JSONL event stream is both the heartbeat and
+   the only place the reviewer's thread id appears — its first line is
+   `{"type":"thread.started","thread_id":"<uuid>"}`. Keep that id; step 5
+   needs it. A running review whose `review.jsonl` has not grown for ~15
+   minutes is hung — kill it and re-run the exact command that hung, this
+   one verbatim (it starts a fresh reviewer thread on the same handover) or
+   step 5's verbatim (it re-sends the same response to the same thread).
+   What does not work is inventing a recovery command: a `codex exec
+   resume` with no prompt is rejected outright, and before the first
+   verdict there is no response to resume with.
 4. Read the verdict; report it in the conversation, then continue
    immediately. Whatever the verdict, first record any [task] findings
-   verbatim in the repo's task list — a JIRA epic, a `TODO.md`, whatever
-   the repo's own agent instructions name; create `TODO.md` at the repo
-   root only if nothing else is named — an APPROVED review can carry tasks
-   too, and a finding that lives only in a review transcript or completion
-   report is lost. When the task list is a file in the repo, this verbatim
-   transcription of the reviewer's own findings is the one tree change
-   permitted between approval and commit — its content was authored by the
-   reviewer, so re-reviewing it adds a round and no information
-   (human-blessed exemption, 2026-08-31). Filing into a tracker outside the
-   repo is not a tree change; the exemption is simply not needed there.
+   verbatim in the repo's task list: the `Task list` line of Loop
+   parameters where it names one (a tracker project or epic, a file,
+   whatever), otherwise whatever the repo's own agent instructions name,
+   otherwise `TODO.md` at the repo root — created if absent. An APPROVED
+   review can carry tasks too, and a finding that lives only in a review
+   transcript or completion report is lost. When the task list is a file in
+   the repo, this verbatim transcription of the reviewer's own findings is
+   the one tree change permitted between approval and commit — its content
+   was authored by the reviewer, so re-reviewing it adds a round and no
+   information (human-blessed exemption, 2026-08-31). Filing into a tracker
+   outside the repo is not a tree change; the exemption is simply not
+   needed there.
 5. On NEEDS-WORK: address every [blocking] finding (suggestions at your
    judgment — state what you did with each), or push back with reasons
    grounded in the project docs; [task] findings are already recorded per
@@ -72,7 +96,10 @@ something only the human can supply — ask.
    to the human — rounds must narrow the change's scope, not expand it;
    added tests, probes, and executed checks are always in scope, whatever
    they do to the diff's line count. Re-review in the same session:
-   `codex exec resume --last --json -o $TEMP/verdict.md - < $TEMP/response.md`
+   `codex exec resume <thread_id> --json -o $SCRATCH/verdict.md - < $SCRATCH/response.md >> $SCRATCH/review.jsonl`
+   — the id kept from step 3, never `--last`: `--last` resolves to the
+   newest recorded session for the working directory, so a second session
+   reviewing the same repo silently hijacks this one's reviewer thread.
    (background + heartbeat rules as in step 3)
    After 3 rounds without approval, continue only on convergence: every
    [blocking] finding so far was accepted and none has come back — each
