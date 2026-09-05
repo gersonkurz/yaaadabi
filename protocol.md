@@ -1,23 +1,41 @@
 # Review protocol (mandatory for every coding task)
 
-Work per @C:/Projects/yaaadabi/developer.md. A task is not done until the
-reviewer (Codex, driven as a subprocess) has approved it. The loop is
-autonomous — do not stop for human approval between steps; consult the human
-only for a material design fork (before implementing), something only they
-can supply, or a review deadlock (a review that will not close — defined in
-step 5).
+<!-- Keep the import below on a line of its own. A trailing period is
+     parsed as part of the filename, so `@developer.md.` inside a sentence
+     silently imports nothing — measured, see the README field notes. -->
+
+@developer.md
+
+Work per the developer role file imported above: a relative import resolves
+against the importing file's own directory, so that is the copy next to this
+protocol, wherever the clone lives. A task is not done until the reviewer
+(Codex, driven as a subprocess) has approved it. The loop is autonomous — do
+not stop for human approval between steps; consult the human only for a
+material design fork (before implementing), something only they can supply,
+or a review deadlock (a review that will not close — defined in step 5).
 
 The repository's CLAUDE.md declares a **Loop parameters** block: the Verify
 commands, the yardstick docs, the review focus, and optionally the task list
-(step 4). Those parameters instantiate this protocol for the repo. A line may
-reach CLAUDE.md through a file it imports rather than written inline — the
-same thing, except that a value stated in the repo's own block wins over an
-imported default. If the block is still the unfilled template, resolve each
-line from the repo's own docs and state that resolution verbatim in the
-handover, so the reviewer judges against a stated yardstick, not an assumed
-one. A line the repo's docs do not settle is something only the human can
-supply — ask; `Task list` is the exception, because step 4 defines its
-default.
+(step 4) and the codex command (below). Those parameters instantiate this
+protocol for the repo. A line may reach CLAUDE.md through a file it imports
+rather than written inline — the same thing, except that a value stated in
+the repo's own block wins over an imported default. If the block is still
+the unfilled template, resolve each line from the repo's own docs and state
+that resolution verbatim in the handover, so the reviewer judges against a
+stated yardstick, not an assumed one. A line the repo's docs do not settle
+is something only the human can supply — ask; `Task list` is the exception,
+because step 4 defines its default.
+
+Two substitutions in the commands below name MACHINE facts, not repo
+choices, so neither is ever an unfilled placeholder. `$LOOP` is the directory
+holding this protocol file and its role files: the directory part of the
+`@`-import that pulls this file into the repo's CLAUDE.md — read that line
+there (a relative import resolves against CLAUDE.md's own directory, so a
+bare `@protocol.md` means the repo root). `$CODEX` is the reviewer binary:
+the `Codex command` line of Loop parameters where the block states one,
+otherwise plain `codex`. Substitute both literally and unquoted — a `~` must
+stay unquoted to expand, and the wiring tool refuses a loop directory
+containing spaces so that nothing here needs quoting.
 
 Every scratch file this loop writes — handover, verdict, response, the
 reviewer's event log — goes in a scratch directory OUTSIDE the repo that is
@@ -53,7 +71,7 @@ relative to the scratch directory does not resolve.
    so the reviewer judges against the right yardstick.
 3. Submit as a BACKGROUND task — reviews routinely exceed 10 minutes; never
    wait in the foreground:
-   `cat C:/Projects/yaaadabi/reviewer.md $SCRATCH/handover.md | codex exec -s read-only -c approval_policy="never" --json -o $SCRATCH/verdict.md - > $SCRATCH/review.jsonl`
+   `cat $LOOP/reviewer.md $SCRATCH/handover.md | $CODEX exec -s read-only -c approval_policy="never" --json -o $SCRATCH/verdict.md - > $SCRATCH/review.jsonl`
    Both settings are load-bearing, and neither substitutes for the other:
    the sandbox blocks a write, the approval policy decides whether the
    reviewer may escalate past that block. With only the sandbox pinned, a
@@ -102,7 +120,7 @@ relative to the scratch directory does not resolve.
    to the human — rounds must narrow the change's scope, not expand it;
    added tests, probes, and executed checks are always in scope, whatever
    they do to the diff's line count. Re-review in the same session:
-   `codex exec resume <thread_id> -c sandbox_mode="read-only" -c approval_policy="never" --json -o $SCRATCH/verdict.md - < $SCRATCH/response.md >> $SCRATCH/review.jsonl`
+   `$CODEX exec resume <thread_id> -c sandbox_mode="read-only" -c approval_policy="never" --json -o $SCRATCH/verdict.md - < $SCRATCH/response.md >> $SCRATCH/review.jsonl`
    — both of step 3's settings must be re-stated on every resumed round,
    and the sandbox in this form: a resumed turn takes the sandbox and
    approval policy of the new invocation, not the ones the thread started

@@ -18,14 +18,18 @@ the installed copy does not update itself.
 
 ## Review loop
 
-@C:/Projects/yaaadabi/protocol.md
+@protocol.md
 
 Loop parameters:
-- Verify: `go vet ./... && go test -count=1 ./...` (the wiring tool), plus reading
-  every prose file the change touches and each file that references it
+- Verify: `go vet ./... && GOOS=windows go vet ./... && go test -count=1 ./...`
+  (the wiring tool, on both platform builds — half of it is behind build
+  tags and only the tagged-out half breaks silently), plus reading every
+  prose file the change touches and each file that references it
   (protocol ↔ roles ↔ README must not contradict each other).
 - Yardstick docs: README.md (especially the field notes — decisions in this
   repo were bought with trial-run failures; don't undo one without a reason
   that beats the original).
-- Review focus: repo-agnosticism of the shared files; consistency between
-  protocol, roles, and README; unverified claims stated as fact.
+- Review focus: repo-agnosticism AND machine-agnosticism of the shared files
+  (no path, platform, or shell assumption that is only true on one machine);
+  consistency between protocol, roles, and README; unverified claims stated
+  as fact.
