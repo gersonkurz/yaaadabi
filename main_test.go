@@ -518,3 +518,88 @@ func link(t *testing.T, from, to string) {
 		t.Fatal(err)
 	}
 }
+
+// The README now offers this as a feature: which instruction set a repo uses
+// is per-repo data, so two repos can be wired to different loop directories
+// and must not bleed into each other.
+func TestReposCanUseDifferentLoopDirs(t *testing.T) {
+	run := runner(t)
+	const strict = "/opt/other/yaaadabi-strict"
+	ordinary, harsh := t.TempDir(), t.TempDir()
+
+	run(planClaudeMD(ordinary, testLoop, defaultCodex))
+	run(planClaudeMD(harsh, strict, defaultCodex))
+
+	for _, tc := range []struct{ repo, want, notWant string }{
+		{ordinary, testLoop, strict},
+		{harsh, strict, testLoop},
+	} {
+		raw, err := os.ReadFile(filepath.Join(tc.repo, "CLAUDE.md"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(string(raw), protocolImport(tc.want)) {
+			t.Errorf("%s: missing its own import %q:\n%s", tc.repo, protocolImport(tc.want), raw)
+		}
+		// Compare whole import lines: one loop directory can be a string
+		// prefix of another, and a substring check would then lie.
+		if strings.Contains(string(raw), protocolImport(tc.notWant)) {
+			t.Errorf("%s: carries the other repo's import %q", tc.repo, protocolImport(tc.notWant))
+		}
+	}
+
+	// And re-running either one against the other's directory is refused,
+	// which is what makes the separation stable rather than accidental.
+	if _, err := planClaudeMD(ordinary, strict, defaultCodex); err == nil {
+		t.Error("expected a refusal when re-wiring to a different loop directory")
+	}
+}
+
+// `Codex command` is the one Loop parameter that is not pure prose: it is
+// paired with a permission rule in settings.local.json. The README tells the
+// human to hand-edit the line and then re-run the tool with a matching
+// -codex, so that remedy has to actually work — and re-running must not trip
+// the mismatch refusal.
+func TestRerunAfterHandEditedCodexInstallsTheRule(t *testing.T) {
+	run := runner(t)
+	repo, home := t.TempDir(), t.TempDir()
+
+	planned, err := planAll(repo, testLoop, defaultCodex, home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range planned {
+		if c.apply != nil {
+			if err := c.apply(); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+
+	// The human edits the line by hand, as the README describes.
+	claudeMD := filepath.Join(repo, "CLAUDE.md")
+	raw, _ := os.ReadFile(claudeMD)
+	edited := strings.Replace(string(raw), "Loop parameters:\n",
+		"Loop parameters:\n- Codex command: codex-nightly\n", 1)
+	if edited == string(raw) {
+		t.Fatal("could not place the Codex command line")
+	}
+	os.WriteFile(claudeMD, []byte(edited), 0o644)
+
+	// Re-running with the matching binary must be accepted, not refused...
+	msg := run(planClaudeMD(repo, testLoop, "codex-nightly"))
+	if !strings.Contains(msg, "already wired") {
+		t.Fatalf("expected the hand edit to be accepted, got %q", msg)
+	}
+	// ...and must install the permission rule that now matches.
+	run(planSettings(repo, "codex-nightly"))
+	settings, _ := os.ReadFile(filepath.Join(repo, ".claude", "settings.local.json"))
+	if !strings.Contains(string(settings), `Bash(codex-nightly exec:*)`) {
+		t.Fatalf("the matching permission rule was not installed:\n%s", settings)
+	}
+	// The superseded rule is left behind; the README says so rather than
+	// pretending the tool prunes it.
+	if !strings.Contains(string(settings), `Bash(codex exec:*)`) {
+		t.Error("expected the old rule to remain, which is what the README documents")
+	}
+}

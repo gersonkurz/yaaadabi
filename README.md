@@ -51,12 +51,13 @@ over reading confidence, findings that can't get lost in transcripts.
 
 1. Clone this repo wherever you keep things. No fixed location: the clone's
    path is written into each wired repo's CLAUDE.md import line, and
-   everything else is derived from it.
-2. Build the wiring tool once, inside the clone: `go build -o yaaadabi .`
-   (`-o yaaadabi.exe` on Windows). Self-contained binary; the Go toolchain
-   is only needed for this step. Building it there is what makes the
-   zero-argument default work — the binary looks for the prose files in its
-   own directory.
+   everything else is derived from it — which is also why different repos
+   can use different instruction sets, see [Customizing](#customizing).
+2. Build the wiring tool once, inside the clone — `go build -o yaaadabi .`
+   on macOS and Linux, `go build -o yaaadabi.exe .` on Windows.
+   Self-contained binary; the Go toolchain is only needed for this step.
+   Building it *inside the clone* is what makes the zero-argument default
+   work: the binary looks for the prose files in its own directory.
 3. Requirements: Claude Code, and codex-cli on PATH — ≥ 0.151.0, last
    exercised with 0.153.2 (macOS arm64, Homebrew).
 
@@ -64,47 +65,35 @@ The tool installs the user-level `/task` command itself; you only need to
 copy `commands/task.md` to `~/.claude/commands/task.md` by hand if you skip
 the tool entirely.
 
-**Once per repo** — macOS and Linux:
+**Once per repo**, and you run it yourself — an agent cannot:
 
-```
-sudo ~/dev/yaaadabi/yaaadabi /path/to/repo
-```
+| Platform | Command |
+|---|---|
+| macOS, Linux | `sudo ~/dev/yaaadabi/yaaadabi /path/to/repo` |
+| Windows, from an elevated (administrator) shell | `…\yaaadabi\yaaadabi.exe C:/path/to/repo` |
 
-Windows, from an elevated (administrator) shell:
+Granting an agent permissions is a human act, and the tool enforces that out
+of process: it refuses to run unless the process is elevated, and fast-fails
+inside an agent session, precisely so no agent can wire up its own
+permissions. `-h` is exempt — printing usage never needs elevation.
 
-```
-C:\Projects\yaaadabi\yaaadabi.exe C:/path/to/repo
-```
+### What differs between Windows and macOS
 
-Run it yourself — granting an agent permissions is a human act, and the tool
-enforces that out of process: it refuses to run unless the process is
-elevated (an administrator token on Windows, uid 0 on macOS/Linux) and
-fast-fails inside an agent session, precisely so no agent can wire up its
-own permissions. Two platform caveats. On Windows, `sudo` is not a
-substitute in practice: without inline mode it opens a new window whose
-output vanishes with it. On macOS/Linux, sudo caches its authentication for
-a few minutes, so an agent running right after you sudo'd can ride that
-timestamp without knowing your password — `Defaults timestamp_timeout=0` in
-sudoers closes it. Nothing the tool does actually needs root, so on unix it
-gives root straight back: it drops supplementary groups, gid and uid to the
-account behind `SUDO_UID`/`SUDO_GID` before it looks at a single path, and
-verifies the drop took effect before continuing. `~` is resolved by looking
-up `SUDO_USER`, never from `$HOME`, so `/task` cannot land in `/var/root`.
+|  | macOS and Linux | Windows |
+|---|---|---|
+| **Consent** | `sudo` — the tool requires uid 0 | an elevated (administrator) token, i.e. the UAC prompt you already answered |
+| **Afterwards** | root is given straight back, before the tool looks at any path: groups, gid and uid drop to the account behind `SUDO_UID`, and it refuses to continue if the drop did not take | nothing to drop — an elevated process is the same user with a fuller token |
+| **The weak spot** | sudo caches its authentication for a few minutes, so an agent starting right after you sudo'd can ride that timestamp without knowing your password; `Defaults timestamp_timeout=0` in sudoers closes it | run your agent sessions non-elevated, or you dissolve the boundary yourself |
+| **Environment** | `sudo` usually strips it, so `$YAAADABI_DIR` needs `sudo -E` — or just pass `-loop-dir` | inherited as usual |
+| **Path in the import** | `/Users/you/dev/yaaadabi` | `C:/Projects/yaaadabi` — forward slashes, written for you |
 
-**Where the clone lives.** The default is the directory of the binary
-itself. Override it with `-loop-dir /path/to/clone` or by exporting
-`YAAADABI_DIR` (note that `sudo` usually strips the environment — pass
-`sudo -E`, or just use the flag). Either way the directory is validated:
-one that does not contain `protocol.md`, `developer.md` and `reviewer.md` is
-refused rather than written into a CLAUDE.md. A path containing spaces is
-also refused — the protocol interpolates it unquoted into both a shell
-command and an `@`-import. A `~/...` path is kept verbatim in the import
-line, which is how one committed CLAUDE.md can work on two machines whose
-homes differ — measured, not assumed: a `@~/…` import expands, and a
-protocol imported that way still reaches its role file by relative import. If the codex
-binary is not called plain `codex` here, pass `-codex <cmd>`: it goes into
-the permission rule and into a `Codex command` line of Loop parameters, and
-the protocol drives that instead.
+Two platform-specific traps worth knowing. On Windows, `sudo` is not a
+substitute for an elevated shell in practice: without inline mode it opens a
+new window whose output vanishes with it. On macOS and Linux, `~` is
+resolved by looking up `SUDO_USER` rather than `$HOME`, because whether
+`sudo` resets `HOME` is a per-machine sudoers policy — otherwise `/task`
+would land in `/var/root` and be invisible to every session while looking
+like a success.
 
 The tool merges the loop's permission rules into
 `.claude/settings.local.json`, appends a `## Review loop` block to
@@ -120,16 +109,15 @@ Loop parameters:
 - Task list: JIRA project ACME — file each [task] finding as an issue
 ```
 
-`Verify` = the commands that must be green before and after review, in the
-form whose tests actually execute — name the variant that defeats the test
-runner's result cache (`go test -count=1 ./...`, not `go test ./...`),
-because a replayed green is not evidence. Compilation caches are fine.
-`Yardstick docs` = what defines "best" in this repo. `Review focus` = what
-this codebase is most at risk of. `Task list` = where deferred `[task]`
-findings go; delete the line and they go to `TODO.md` at the repo root.
-`Codex command` = the reviewer binary, written only when it is not plain
-`codex`. C++ repos whose build needs the MSVC environment: add a
-`build.cmd` that
+| Parameter | What it says | If you omit it |
+|---|---|---|
+| `Verify` | The commands that must be green before and after review, in the form whose tests actually **execute** — name the variant that defeats the runner's result cache (`go test -count=1 ./...`, not `go test ./...`), because a replayed green is not evidence. Compilation caches are fine. | The agent resolves it from the repo's own docs and states that resolution in the handover; if the docs do not settle it, it asks you. |
+| `Yardstick docs` | What defines "best" in this repo — the docs the reviewer judges against. | Same as above. |
+| `Review focus` | What this codebase is most at risk of. Violations there are `[blocking]`. | Same as above. |
+| `Task list` | Where deferred `[task]` findings go — a tracker project, an epic, a file. | `TODO.md` at the repo root, created if absent. |
+| `Codex command` | The reviewer binary, when it is not plain `codex`. The one parameter paired with a permission rule, so it is changed with the tool rather than by hand alone — see [Customizing](#one-repo-the-loop-parameters-block). | `codex`. The wiring tool only writes this line when you passed `-codex`. |
+
+C++ repos whose build needs the MSVC environment: add a `build.cmd` that
 `call`s `VsDevCmd.bat` first and name it in Verify (CMake presets pinning
 a Visual Studio generator don't need this — CMake locates the toolchain
 itself).
@@ -147,7 +135,33 @@ loop simply does not happen. The flag is
 you need to undo a mistaken decline. Non-interactive runs (`claude -p`)
 cannot show the dialog, so they never load an unapproved external import.
 
-## Local conventions across several repos
+## Customizing
+
+Three dials, from the most local to the most global. None of them is a
+config file: each is either a line in a repo's own CLAUDE.md, or a flag you
+pass once when wiring that repo.
+
+### One repo: the Loop parameters block
+
+The block the tool leaves in CLAUDE.md — the table above — is the per-repo
+dial, and it is plain markdown you edit yourself. `Verify`, `Yardstick
+docs`, `Review focus` and `Task list` are pure prose read by the protocol:
+change them whenever the repo changes, nothing caches them, no tool run is
+needed, and the edit takes effect in the next **fresh** session, because the
+protocol loads at session start.
+
+`Codex command` is the exception, because it is the one line paired with
+something outside CLAUDE.md — the `Bash(<cmd> exec:*)` rule in
+`.claude/settings.local.json`. Editing it alone leaves the protocol driving
+one binary while the permission rule names another, and the loop then stalls
+on a permission prompt in a session that is supposed to be autonomous. So
+after changing that line, re-run the wiring tool with a matching
+`-codex <cmd>`; it accepts the hand edit and installs the rule. The
+superseded rule stays behind — the tool only ever adds rules — so remove it
+by hand if you would rather not leave a stale allow for a binary you no
+longer drive.
+
+### Several of your repos: one extra import
 
 Conventions shared by a group of your repos but nobody else's — a tracker
 all of them file into, a house commit style — do not belong in this repo,
@@ -174,6 +188,59 @@ share. Precedence: a line the repo states itself wins over the imported
 default, so a shared default is worth setting even where one repo differs.
 The file is yours, stays out of every repo, and this repo never learns it
 exists.
+
+### A different protocol entirely: `-loop-dir`
+
+Which instruction set a repo uses is per-repo DATA, not a machine-wide
+setting: the wiring tool writes that directory into the repo's own import
+line, and nothing else anywhere records it. So you can keep more than one
+set of the shared prose and point repos at different ones — a fork with a
+harsher `reviewer.md` for the code that must not break, the stock one for
+everything else:
+
+```
+sudo ~/dev/yaaadabi/yaaadabi         /path/to/ordinary-repo
+sudo ~/dev/yaaadabi-strict/yaaadabi  /path/to/high-stakes-repo
+```
+
+Each repo's CLAUDE.md then names its own, and `$LOOP` — how the protocol
+finds `reviewer.md` to feed Codex — resolves per repo from that same line,
+so the two never mix. To fork the prose, clone this repo again, edit
+`protocol.md` / `developer.md` / `reviewer.md`, build the tool inside the
+fork, and wire with that binary.
+
+**How the loop directory is chosen**, in order: the `-loop-dir` flag, else
+`$YAAADABI_DIR`, else the directory of the running binary — which is the
+clone itself if you built it there, so the common case needs neither. On
+macOS and Linux remember that `sudo` usually strips the environment, so
+`$YAAADABI_DIR` needs `sudo -E`; the flag is simpler.
+
+Whatever it resolves to is validated before anything is written:
+
+- A directory that does not contain `protocol.md`, `developer.md` and
+  `reviewer.md` is refused, rather than written into a CLAUDE.md that would
+  then import nothing.
+- A path containing whitespace or shell metacharacters is refused. The
+  protocol interpolates it unquoted into both a shell command and an
+  `@`-import, so the safety has to be in the value.
+- A `~/...` path is kept verbatim in the import line instead of being
+  expanded. That is what lets ONE committed CLAUDE.md work on two machines
+  whose home directories differ — measured, not assumed: a `@~/…` import
+  expands, and a protocol imported that way still reaches its role file by
+  relative import.
+
+**Changing it later** is a hand edit, deliberately. Re-running the tool
+against a repo already wired to a different directory does not rewrite it:
+it reports the path that is in the file and the path this run would have
+written, and stops. Same for `-codex` disagreeing with the repo's
+`Codex command` line. The tool never guesses which of two values you meant —
+so after moving a clone, or moving machines, fix the import line in each
+repo's CLAUDE.md (or delete the `## Review loop` block and re-run).
+
+**If the codex binary is not called plain `codex`** here, pass
+`-codex <cmd>` when wiring: it goes into the permission rule AND into a
+`Codex command` line of Loop parameters, so the rule and the protocol always
+name the same binary.
 
 ## What's in the box
 
