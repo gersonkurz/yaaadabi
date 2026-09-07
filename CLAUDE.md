@@ -21,11 +21,22 @@ the installed copy does not update itself.
 @protocol.md
 
 Loop parameters:
-- Verify: `go vet ./... && GOOS=windows go vet ./... && go test -count=1 ./...`
-  (the wiring tool, on both platform builds — half of it is behind build
-  tags and only the tagged-out half breaks silently), plus reading every
-  prose file the change touches and each file that references it
-  (protocol ↔ roles ↔ README must not contradict each other).
+- Verify: all four of these, and the tests must actually EXECUTE — half the
+  tool sits behind build tags, so vetting only the host build leaves the
+  tagged-out half to break silently:
+  1. `go vet ./...` — the host build.
+  2. `go vet ./...` with `GOOS=windows` — the `elevate_windows.go` half.
+  3. `go vet ./...` with `GOOS=darwin` — the `elevate_unix.go` half (`linux`
+     selects the same file, either will do).
+  4. `go test -count=1 ./...` — `-count=1` so no result is replayed.
+
+  Setting `GOOS` is the one shell-specific part, and this repo is worked on
+  from both kinds of machine: `GOOS=windows go vet ./...` in a POSIX shell,
+  `$env:GOOS='windows'; go vet ./...` in PowerShell (then `Remove-Item
+  Env:GOOS`). Name in the handover which form ran.
+
+  Plus reading every prose file the change touches and each file that
+  references it (protocol ↔ roles ↔ README must not contradict each other).
 - Yardstick docs: README.md (especially the field notes — decisions in this
   repo were bought with trial-run failures; don't undo one without a reason
   that beats the original).

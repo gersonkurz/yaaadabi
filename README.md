@@ -111,7 +111,7 @@ Loop parameters:
 
 | Parameter | What it says | If you omit it |
 |---|---|---|
-| `Verify` | The commands that must be green before and after review, in the form whose tests actually **execute** — name the variant that defeats the runner's result cache (`go test -count=1 ./...`, not `go test ./...`), because a replayed green is not evidence. Compilation caches are fine. | The agent resolves it from the repo's own docs and states that resolution in the handover; if the docs do not settle it, it asks you. |
+| `Verify` | The commands that must be green before and after review, in the form whose tests actually **execute** — name the variant that defeats the runner's result cache (`go test -count=1 ./...`, not `go test ./...`), because a replayed green is not evidence. Compilation caches are fine. If the repo is worked on from more than one OS, name the checks rather than one shell's command string: see the field note below. | The agent resolves it from the repo's own docs and states that resolution in the handover; if the docs do not settle it, it asks you. |
 | `Yardstick docs` | What defines "best" in this repo — the docs the reviewer judges against. | Same as above. |
 | `Review focus` | What this codebase is most at risk of. Violations there are `[blocking]`. | Same as above. |
 | `Task list` | Where deferred `[task]` findings go — a tracker project, an epic, a file. | `TODO.md` at the repo root, created if absent. |
@@ -352,6 +352,19 @@ reason that beats the original.
   is idempotent, so re-running finishes the job; making four small writes
   atomic would need a staging directory, which is a lot of machinery for
   "run it again".
+- **A Verify line is itself a platform assumption**: the macOS port added
+  `GOOS=windows go vet ./...` to this repo's own Verify so the tagged-out
+  half of the tool could not break silently — and in doing so made the line
+  unusable on the very machine it was protecting. `VAR=x cmd` is POSIX shell
+  syntax that neither cmd.exe nor PowerShell parses, and on a Windows host
+  `GOOS=windows` re-vets the build that was just vetted while the unix half
+  goes unchecked. Loop parameters are copied verbatim into every handover and
+  run by whichever machine picks the task up, so a parameter that only works
+  in one shell is the same defect class as a hardcoded path — and this repo's
+  review focus names exactly that. A Verify line for a repo built on more
+  than one OS should therefore name the CHECKS, with the shell-specific part
+  spelled out for each shell, rather than one string that happens to run
+  where its author was sitting.
 - **macOS has no UAC, so the gate is `sudo` — with two consequences**:
   `geteuid() == 0` is the only in-process, unspoofable equivalent, and it is
   weaker than UAC in one specific way, because sudo's timestamp cache lets a
