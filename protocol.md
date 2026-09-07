@@ -28,12 +28,17 @@ because step 4 defines its default.
 
 Two substitutions in the commands below name MACHINE facts, not repo
 choices, so neither is ever an unfilled placeholder. `$LOOP` is the directory
-holding this protocol file and its role files: the directory part of the
-`@`-import that pulls this file into the repo's CLAUDE.md — read that line
-there (a relative import resolves against CLAUDE.md's own directory, so a
-bare `@protocol.md` means the repo root). `$CODEX` is the reviewer binary:
-the `Codex command` line of Loop parameters where the block states one,
-otherwise plain `codex`. Substitute both literally and unquoted — a `~` must
+holding this protocol file and its role files. Find it in the
+`@`-import that loaded this file, wherever that line is stated: the repo's
+CLAUDE.md, or a `CLAUDE.local.md` beside it, or a file one of those imports
+— whichever names this protocol. A relative import resolves against the
+importing file's own directory, so a bare `@protocol.md` in CLAUDE.md means
+the repo root. A repo worked on from more than one machine may carry one
+such line PER MACHINE, because Claude Code skips an import whose path does
+not exist and still loads the others; where there are several, `$LOOP` is
+the one that exists on the machine you are on.
+`$CODEX` is the reviewer binary: the `Codex command` line of Loop parameters
+where the block states one, otherwise plain `codex`. Substitute both literally and unquoted — a `~` must
 stay unquoted to expand, and the wiring tool refuses a loop directory
 containing spaces so that nothing here needs quoting.
 

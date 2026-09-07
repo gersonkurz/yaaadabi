@@ -435,7 +435,7 @@ func planClaudeMD(dir, loopDir, codexCmd string) (change, error) {
 	// which path the human wants; say what is there and what this run wanted.
 	if !strings.Contains(existing, importLine) {
 		if m := importRE.FindStringSubmatch(existing); m != nil {
-			return change{}, fmt.Errorf("%s: already wired to a different loop directory (@%s), this run would write %s — update that line by hand, or delete the Review loop block and re-run", path, m[1], importLine)
+			return change{}, fmt.Errorf("%s: already wired to a different loop directory (@%s), this run would write %s — if that is ANOTHER MACHINE's clone, add this run's line next to it by hand and keep both (Claude Code skips an import whose path does not exist); if the clone merely moved, replace it, or delete the Review loop block and re-run", path, m[1], importLine)
 		}
 	}
 	if found > 0 {

@@ -193,6 +193,45 @@ default, so a shared default is worth setting even where one repo differs.
 The file is yours, stays out of every repo, and this repo never learns it
 exists.
 
+### One repo, two machines
+
+A repo you work on from both a Mac and a Windows box has one committed
+CLAUDE.md but two different clone paths, and the import line can only name
+one of them. List one line per machine:
+
+```markdown
+## Review loop
+
+@C:/Projects/yaaadabi/protocol.md
+@/Users/you/dev/yaaadabi/protocol.md
+
+Loop parameters:
+- Verify: just verify
+```
+
+Claude Code skips an import whose path does not exist and still loads the
+others — measured, with canary strings: a CLAUDE.md holding one dead import
+and one live one loads the live one and says nothing about the dead one. So
+each machine picks up its own line and ignores the other, and adding a third
+machine is adding a line. `$LOOP` — how the protocol finds `reviewer.md` to
+feed Codex — resolves to whichever of those directories exists on the
+machine in use; the protocol says so.
+
+Two things worth knowing before choosing this over the alternatives. It puts
+your local directory layout in a file your colleagues share, which is fine
+for a repo that is yours and less fine for a team repo — if that matters,
+keep the import in a gitignored `CLAUDE.local.md` instead, which Claude Code
+loads alongside CLAUDE.md, or point one `@~/...` line at a per-machine file
+in your home directory — one committed line instead of one per machine,
+though `~` inside an import is measured only on macOS here and unverified on
+Windows, so that one you would be testing. Either alternative needs the
+protocol to find `$LOOP` in the file that actually states the import, which
+it does: measured with the import in a `CLAUDE.local.md`, an agent resolved
+`$LOOP` to the right directory. And the wiring tool will not add the second
+line for you: run on a repo already wired to a different directory it
+reports both paths and stops, because it cannot tell a second machine from a
+clone that moved. Adding the line is a hand edit, once per repo per machine.
+
 ### A different protocol entirely: `-loop-dir`
 
 Which instruction set a repo uses is per-repo DATA, not a machine-wide
@@ -229,9 +268,12 @@ Whatever it resolves to is validated before anything is written:
   `@`-import, so the safety has to be in the value.
 - A `~/...` path is kept verbatim in the import line instead of being
   expanded. That is what lets ONE committed CLAUDE.md work on two machines
-  whose home directories differ — measured, not assumed: a `@~/…` import
-  expands, and a protocol imported that way still reaches its role file by
-  relative import.
+  whose home directories differ, PROVIDED the clone sits at the same
+  home-relative path on each. Measured on macOS: a `@~/…` import expands,
+  and a protocol imported that way still reaches its role file by relative
+  import. Not verified on Windows — if you rely on it there, check it before
+  trusting it, and the per-machine import lines under "One repo, two
+  machines" need no tilde at all.
 
 **Changing it later** is a hand edit, deliberately. Re-running the tool
 against a repo already wired to a different directory does not rewrite it:
@@ -328,8 +370,9 @@ reason that beats the original.
   until it was measured, and rightly so: the first probe of it failed (the
   trailing period above), and a design resting on an unverified platform
   behaviour would have shipped broken. Probe first, then depend on it. The
-  `@~/…` form was measured the same way, and needed a trick to measure at
-  all: a tilde path that resolves OUTSIDE the working directory is an
+  `@~/…` form was measured the same way ON MACOS — never on Windows, which
+  is why the README qualifies it wherever it is offered — and needed a trick
+  to measure at all: a tilde path that resolves OUTSIDE the working directory is an
   external import, so the approval gate below hides the answer. Putting the
   probe repo under `$HOME` separates the two questions, and both then pass.
 - **The external-import approval is part of the setup, not a detail**: a
