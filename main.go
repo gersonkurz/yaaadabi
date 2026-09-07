@@ -41,6 +41,9 @@ var loopProse = []string{"protocol.md", "developer.md", "reviewer.md"}
 // the same default protocol.md states for the $CODEX substitution.
 const defaultCodex = "codex"
 
+// loopHeading is what marks a repo as wired, in whichever CLAUDE.md holds it.
+const loopHeading = "## Review loop"
+
 // importRE finds an existing protocol import in a CLAUDE.md, so a repo wired
 // to a DIFFERENT clone is reported as such instead of as damage. codexRE
 // reads back the machine fact the tool itself wrote, for the same reason.
@@ -81,7 +84,7 @@ func protocolImport(loopDir string) string {
 // line appears only when it differs from the default, so the common case
 // carries no noise.
 func loopBlock(loopDir, codexCmd string) string {
-	b := "## Review loop\n\n" + protocolImport(loopDir) + "\n\nLoop parameters:\n"
+	b := loopHeading + "\n\n" + protocolImport(loopDir) + "\n\nLoop parameters:\n"
 	if codexCmd != defaultCodex {
 		b += "- Codex command: " + codexCmd + "\n"
 	}
@@ -212,10 +215,16 @@ func main() {
 // written anywhere, so a repo can never end up with a permission rule for a
 // codex binary its CLAUDE.md does not name.
 func planAll(dir, loopDir, codexCmd, home string) ([]change, error) {
+	// Resolved ONCE and handed to both writers that care: the block and the
+	// AGENTS.md stub that points at it must never name different files.
+	claudeMD, err := claudeMDPath(dir)
+	if err != nil {
+		return nil, err
+	}
 	plans := []func() (change, error){
 		func() (change, error) { return planSettings(dir, codexCmd) },
-		func() (change, error) { return planClaudeMD(dir, loopDir, codexCmd) },
-		func() (change, error) { return planAgentsMD(dir) },
+		func() (change, error) { return planClaudeMD(dir, claudeMD, loopDir, codexCmd) },
+		func() (change, error) { return planAgentsMD(dir, claudeMD) },
 		func() (change, error) { return planTaskCommand(home) },
 	}
 	planned := make([]change, 0, len(plans))
@@ -398,12 +407,61 @@ func planSettings(dir, codexCmd string) (change, error) {
 	}, nil
 }
 
+// claudeMDPath decides WHICH CLAUDE.md this repo uses, because there are two
+// legal places for one: `./CLAUDE.md` and `./.claude/CLAUDE.md`. Claude Code
+// loads both as project instructions, so a repo that keeps its instructions
+// in `.claude/` used to get a SECOND, competing file at the root from this
+// tool — two Review loop blocks, both loaded, and the human deleting one by
+// hand afterwards.
+//
+// Rules, in order: a file that is already wired wins, because that is where
+// the human (or an earlier run) put the block; both wired is ambiguous and
+// refused rather than doubled; otherwise write where the repo already keeps
+// its instructions, preferring `.claude/CLAUDE.md` when it exists, since a
+// repo that has one chose it deliberately.
+func claudeMDPath(dir string) (string, error) {
+	root := filepath.Join(dir, "CLAUDE.md")
+	nested := filepath.Join(dir, ".claude", "CLAUDE.md")
+	rootWired, err := hasLoopBlock(root)
+	if err != nil {
+		return "", err
+	}
+	nestedWired, err := hasLoopBlock(nested)
+	if err != nil {
+		return "", err
+	}
+	switch {
+	case rootWired && nestedWired:
+		return "", fmt.Errorf("%s and %s both carry a %q block — both files load, so the loop would be declared twice; delete the block from whichever of them should not have it, then re-run", root, nested, loopHeading)
+	case nestedWired:
+		return nested, nil
+	case rootWired:
+		return root, nil
+	}
+	if _, err := os.Stat(nested); err == nil {
+		return nested, nil
+	}
+	return root, nil
+}
+
+// hasLoopBlock reports whether a CLAUDE.md exists and already declares the
+// loop. A missing file is not an error — most repos have only one of the two.
+func hasLoopBlock(path string) (bool, error) {
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return false, nil
+		}
+		return false, err
+	}
+	return strings.Contains(string(raw), loopHeading), nil
+}
+
 // planClaudeMD appends the Review loop block unless one is already there.
 // Both machine facts it writes — the clone's location and the codex command
 // — are checked against what the file already says: this tool never guesses
 // which of two conflicting values the human meant.
-func planClaudeMD(dir, loopDir, codexCmd string) (change, error) {
-	path := filepath.Join(dir, "CLAUDE.md")
+func planClaudeMD(dir, path, loopDir, codexCmd string) (change, error) {
 	if err := refuseSymlinkChain(dir, path); err != nil {
 		return change{}, err
 	}
@@ -413,7 +471,7 @@ func planClaudeMD(dir, loopDir, codexCmd string) (change, error) {
 	}
 	existing := string(raw)
 	importLine := protocolImport(loopDir)
-	markers := []string{"## Review loop", importLine, "Loop parameters:"}
+	markers := []string{loopHeading, importLine, "Loop parameters:"}
 	found := 0
 	for _, m := range markers {
 		if strings.Contains(existing, m) {
@@ -439,7 +497,7 @@ func planClaudeMD(dir, loopDir, codexCmd string) (change, error) {
 		}
 	}
 	if found > 0 {
-		return change{}, fmt.Errorf("%s: partially wired (needs the \"## Review loop\" heading, the protocol import line, and a \"Loop parameters:\" block; found %d of 3) — fix it by hand", path, found)
+		return change{}, fmt.Errorf("%s: partially wired (needs the %q heading, the protocol import line, and a \"Loop parameters:\" block; found %d of 3) — fix it by hand", path, loopHeading, found)
 	}
 	content := loopBlock(loopDir, codexCmd)
 	if existing == "" {
@@ -454,7 +512,10 @@ func planClaudeMD(dir, loopDir, codexCmd string) (change, error) {
 }
 
 // planAgentsMD gives Codex-as-reviewer a project entry point if none exists.
-func planAgentsMD(dir string) (change, error) {
+// The stub names the CLAUDE.md this repo actually uses: pointing at the root
+// in a repo whose instructions live in `.claude/` would send the reviewer to
+// a file that is not there.
+func planAgentsMD(dir, claudeMD string) (change, error) {
 	path := filepath.Join(dir, "AGENTS.md")
 	if err := refuseSymlinkChain(dir, path); err != nil {
 		return change{}, err
@@ -462,7 +523,11 @@ func planAgentsMD(dir string) (change, error) {
 	if _, err := os.Stat(path); err == nil {
 		return change{msg: path + ": exists, untouched"}, nil
 	}
-	stub := "# AGENTS.md\n\nRead CLAUDE.md for project information; it is the single source of truth.\n"
+	rel, err := filepath.Rel(dir, claudeMD)
+	if err != nil {
+		rel = filepath.Base(claudeMD)
+	}
+	stub := fmt.Sprintf("# AGENTS.md\n\nRead `%s` for project information; it is the single source of truth.\n", filepath.ToSlash(rel))
 	return change{
 		msg:   path + ": stub created (points at CLAUDE.md)",
 		apply: func() error { return os.WriteFile(path, []byte(stub), 0o644) },

@@ -31,6 +31,16 @@ func writeClone(t *testing.T, dir string) {
 	}
 }
 
+// planMD resolves the repo's CLAUDE.md the way planAll does, then plans the
+// block for it — so tests exercise the same pairing production uses.
+func planMD(dir, loopDir, codexCmd string) (change, error) {
+	md, err := claudeMDPath(dir)
+	if err != nil {
+		return change{}, err
+	}
+	return planClaudeMD(dir, md, loopDir, codexCmd)
+}
+
 // runner returns a helper that carries out a planned change the way main
 // does. A closure, so a plan call can be passed straight through as the sole
 // argument.
@@ -144,7 +154,7 @@ func TestPlanClaudeMDRefusesPartialWiring(t *testing.T) {
 	} {
 		dir := t.TempDir()
 		os.WriteFile(filepath.Join(dir, "CLAUDE.md"), []byte(content), 0o644)
-		if _, err := planClaudeMD(dir, testLoop, defaultCodex); err == nil {
+		if _, err := planMD(dir, testLoop, defaultCodex); err == nil {
 			t.Errorf("%s: expected error, got none", name)
 		}
 	}
@@ -162,7 +172,7 @@ func TestPlanClaudeMDReportsDifferentLoopDir(t *testing.T) {
 		dir := t.TempDir()
 		os.WriteFile(filepath.Join(dir, "CLAUDE.md"),
 			[]byte("# X\n\n## Review loop\n\n"+old+"\n\nLoop parameters:\n- Verify: make\n"), 0o644)
-		_, err := planClaudeMD(dir, testLoop, defaultCodex)
+		_, err := planMD(dir, testLoop, defaultCodex)
 		if err == nil {
 			t.Errorf("%s: expected error, got none", name)
 			continue
@@ -182,8 +192,8 @@ func TestPlanClaudeMDAppendsOnceAndCreates(t *testing.T) {
 	dir := t.TempDir()
 	os.WriteFile(filepath.Join(dir, "CLAUDE.md"), []byte("# Existing\n\nproject info\n"), 0o644)
 
-	run(planClaudeMD(dir, testLoop, defaultCodex))
-	msg := run(planClaudeMD(dir, testLoop, defaultCodex))
+	run(planMD(dir, testLoop, defaultCodex))
+	msg := run(planMD(dir, testLoop, defaultCodex))
 	if !strings.Contains(msg, "already wired") {
 		t.Fatalf("expected idempotent second run, got %q", msg)
 	}
@@ -207,7 +217,7 @@ func TestPlanClaudeMDAppendsOnceAndCreates(t *testing.T) {
 
 	// Missing CLAUDE.md gets created.
 	dir2 := t.TempDir()
-	run(planClaudeMD(dir2, testLoop, defaultCodex))
+	run(planMD(dir2, testLoop, defaultCodex))
 	raw2, _ := os.ReadFile(filepath.Join(dir2, "CLAUDE.md"))
 	if !strings.Contains(string(raw2), importLine) {
 		t.Fatal("created CLAUDE.md lacks import line")
@@ -234,10 +244,10 @@ func TestPlanClaudeMDCatchesCodexTransitions(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			run := runner(t)
 			dir := t.TempDir()
-			run(planClaudeMD(dir, testLoop, tc.wiredWith))
+			run(planMD(dir, testLoop, tc.wiredWith))
 			before, _ := os.ReadFile(filepath.Join(dir, "CLAUDE.md"))
 
-			c, err := planClaudeMD(dir, testLoop, tc.rerunWith)
+			c, err := planMD(dir, testLoop, tc.rerunWith)
 			if tc.wantRefusal {
 				if err == nil {
 					t.Fatalf("expected a refusal, got %q", c.msg)
@@ -298,7 +308,7 @@ func TestPlanAllIsAllOrNothing(t *testing.T) {
 func TestPlanClaudeMDWritesNonDefaultCodex(t *testing.T) {
 	run := runner(t)
 	dir := t.TempDir()
-	run(planClaudeMD(dir, testLoop, "codex-nightly"))
+	run(planMD(dir, testLoop, "codex-nightly"))
 	raw, _ := os.ReadFile(filepath.Join(dir, "CLAUDE.md"))
 	if !strings.Contains(string(raw), "- Codex command: codex-nightly\n") {
 		t.Fatalf("non-default codex command not recorded:\n%s", raw)
@@ -444,11 +454,11 @@ func TestPlanRefusesToWriteThroughSymlinks(t *testing.T) {
 	cases := map[string]func(t *testing.T, repo, canary string) (change, error){
 		"CLAUDE.md": func(t *testing.T, repo, canary string) (change, error) {
 			link(t, filepath.Join(repo, "CLAUDE.md"), canary)
-			return planClaudeMD(repo, testLoop, defaultCodex)
+			return planMD(repo, testLoop, defaultCodex)
 		},
 		"AGENTS.md": func(t *testing.T, repo, canary string) (change, error) {
 			link(t, filepath.Join(repo, "AGENTS.md"), canary)
-			return planAgentsMD(repo)
+			return planAgentsMD(repo, filepath.Join(repo, "CLAUDE.md"))
 		},
 		"settings.local.json": func(t *testing.T, repo, canary string) (change, error) {
 			os.MkdirAll(filepath.Join(repo, ".claude"), 0o755)
@@ -532,8 +542,8 @@ func TestReposCanUseDifferentLoopDirs(t *testing.T) {
 	const strict = "/opt/other/yaaadabi-strict"
 	ordinary, harsh := t.TempDir(), t.TempDir()
 
-	run(planClaudeMD(ordinary, testLoop, defaultCodex))
-	run(planClaudeMD(harsh, strict, defaultCodex))
+	run(planMD(ordinary, testLoop, defaultCodex))
+	run(planMD(harsh, strict, defaultCodex))
 
 	for _, tc := range []struct{ repo, want, notWant string }{
 		{ordinary, testLoop, strict},
@@ -555,7 +565,7 @@ func TestReposCanUseDifferentLoopDirs(t *testing.T) {
 
 	// And re-running either one against the other's directory is refused,
 	// which is what makes the separation stable rather than accidental.
-	if _, err := planClaudeMD(ordinary, strict, defaultCodex); err == nil {
+	if _, err := planMD(ordinary, strict, defaultCodex); err == nil {
 		t.Error("expected a refusal when re-wiring to a different loop directory")
 	}
 }
@@ -592,7 +602,7 @@ func TestRerunAfterHandEditedCodexInstallsTheRule(t *testing.T) {
 	os.WriteFile(claudeMD, []byte(edited), 0o644)
 
 	// Re-running with the matching binary must be accepted, not refused...
-	msg := run(planClaudeMD(repo, testLoop, "codex-nightly"))
+	msg := run(planMD(repo, testLoop, "codex-nightly"))
 	if !strings.Contains(msg, "already wired") {
 		t.Fatalf("expected the hand edit to be accepted, got %q", msg)
 	}
@@ -606,5 +616,148 @@ func TestRerunAfterHandEditedCodexInstallsTheRule(t *testing.T) {
 	// pretending the tool prunes it.
 	if !strings.Contains(string(settings), `Bash(codex exec:*)`) {
 		t.Error("expected the old rule to remain, which is what the README documents")
+	}
+}
+
+// A repo may keep its instructions in ./CLAUDE.md or ./.claude/CLAUDE.md, and
+// Claude Code loads both. Writing to the root of a repo that uses .claude/
+// produced a second, competing file with its own Review loop block — which is
+// what happened in practice, and had to be undone by hand.
+func TestClaudeMDPathPicksTheRepoOwnFile(t *testing.T) {
+	const wired = "# X\n\n## Review loop\n\n@/some/clone/protocol.md\n\nLoop parameters:\n- Verify: make\n"
+	const plain = "# X\n\nproject notes\n"
+
+	cases := []struct {
+		name       string
+		root       string // "" = absent
+		nested     string // "" = absent
+		want       string // "CLAUDE.md" or ".claude/CLAUDE.md"
+		wantRefuse bool
+	}{
+		{name: "only root", root: plain, want: "CLAUDE.md"},
+		{name: "only nested", nested: plain, want: ".claude/CLAUDE.md"},
+		{name: "neither", want: "CLAUDE.md"},
+		{name: "both, neither wired", root: plain, nested: plain, want: ".claude/CLAUDE.md"},
+		{name: "both, root wired", root: wired, nested: plain, want: "CLAUDE.md"},
+		{name: "both, nested wired", root: plain, nested: wired, want: ".claude/CLAUDE.md"},
+		{name: "only nested, wired", nested: wired, want: ".claude/CLAUDE.md"},
+		{name: "both wired", root: wired, nested: wired, wantRefuse: true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			if tc.root != "" {
+				if err := os.WriteFile(filepath.Join(dir, "CLAUDE.md"), []byte(tc.root), 0o644); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if tc.nested != "" {
+				if err := os.MkdirAll(filepath.Join(dir, ".claude"), 0o755); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(filepath.Join(dir, ".claude", "CLAUDE.md"), []byte(tc.nested), 0o644); err != nil {
+					t.Fatal(err)
+				}
+			}
+
+			got, err := claudeMDPath(dir)
+			if tc.wantRefuse {
+				if err == nil {
+					t.Fatalf("expected a refusal, got %q", got)
+				}
+				if !strings.Contains(err.Error(), loopHeading) {
+					t.Errorf("the refusal should name the block: %v", err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if want := filepath.Join(dir, tc.want); got != want {
+				t.Fatalf("got %q, want %q", got, want)
+			}
+		})
+	}
+}
+
+// The regression in full: wiring a repo that keeps its CLAUDE.md in .claude/
+// must not leave a second one at the root.
+func TestPlanClaudeMDDoesNotCreateACompetingRootFile(t *testing.T) {
+	run := runner(t)
+	dir := t.TempDir()
+	nested := filepath.Join(dir, ".claude", "CLAUDE.md")
+	os.MkdirAll(filepath.Dir(nested), 0o755)
+	os.WriteFile(nested, []byte("# Chimera-shaped\n\nproject notes\n"), 0o644)
+
+	msg := run(planMD(dir, testLoop, defaultCodex))
+	if !strings.Contains(msg, filepath.Join(".claude", "CLAUDE.md")) {
+		t.Errorf("should report the file it actually wrote: %q", msg)
+	}
+	raw, err := os.ReadFile(nested)
+	if err != nil || !strings.Contains(string(raw), protocolImport(testLoop)) {
+		t.Fatalf("the block did not land in .claude/CLAUDE.md: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "CLAUDE.md")); err == nil {
+		t.Error("a competing CLAUDE.md was created at the repo root")
+	}
+	// And it stays idempotent through the nested file.
+	if msg := run(planMD(dir, testLoop, defaultCodex)); !strings.Contains(msg, "already wired") {
+		t.Errorf("second run should be a no-op, got %q", msg)
+	}
+}
+
+// The AGENTS.md stub is Codex's entry point, so it must name the CLAUDE.md
+// that exists. Through planAll, because that is where the pairing is made.
+func TestPlanAllStubPointsAtTheFileThatExists(t *testing.T) {
+	for _, tc := range []struct {
+		name, seedAt, want string
+	}{
+		{"repo keeping instructions in .claude/", ".claude/CLAUDE.md", ".claude/CLAUDE.md"},
+		{"repo keeping them at the root", "CLAUDE.md", "CLAUDE.md"},
+		{"repo with none yet", "", "CLAUDE.md"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir, home := t.TempDir(), t.TempDir()
+			if tc.seedAt != "" {
+				p := filepath.Join(dir, filepath.FromSlash(tc.seedAt))
+				os.MkdirAll(filepath.Dir(p), 0o755)
+				os.WriteFile(p, []byte("# seeded\n\nnotes\n"), 0o644)
+			}
+			planned, err := planAll(dir, testLoop, defaultCodex, home)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, c := range planned {
+				if c.apply != nil {
+					if err := c.apply(); err != nil {
+						t.Fatal(err)
+					}
+				}
+			}
+
+			stub, err := os.ReadFile(filepath.Join(dir, "AGENTS.md"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !strings.Contains(string(stub), "`"+tc.want+"`") {
+				t.Errorf("stub should point at %q:\n%s", tc.want, stub)
+			}
+			// The file it names must be there, and must be the wired one.
+			target := filepath.Join(dir, filepath.FromSlash(tc.want))
+			raw, err := os.ReadFile(target)
+			if err != nil {
+				t.Fatalf("the stub points at a file that does not exist: %v", err)
+			}
+			if !strings.Contains(string(raw), protocolImport(testLoop)) {
+				t.Errorf("%s is not the wired file:\n%s", tc.want, raw)
+			}
+			// And no competing instructions file appeared beside it.
+			other := filepath.Join(dir, "CLAUDE.md")
+			if tc.want != "CLAUDE.md" {
+				if _, err := os.Stat(other); err == nil {
+					t.Error("a competing CLAUDE.md was created at the repo root")
+				}
+			}
+		})
 	}
 }

@@ -100,9 +100,10 @@ would land in `/var/root` and be invisible to every session while looking
 like a success.
 
 The tool merges the loop's permission rules into
-`.claude/settings.local.json`, appends a `## Review loop` block to
-CLAUDE.md, creates an AGENTS.md stub if the repo has none, and installs the
-user-level `/task` command. Idempotent — safe to re-run. Then fill in the
+`.claude/settings.local.json`, appends a `## Review loop` block to the
+repo's CLAUDE.md — `./CLAUDE.md` or `./.claude/CLAUDE.md`, whichever the
+repo actually uses — creates an AGENTS.md stub if the repo has none, and
+installs the user-level `/task` command. Idempotent — safe to re-run. Then fill in the
 `<placeholder>` lines it leaves in CLAUDE.md:
 
 ```markdown
@@ -299,7 +300,7 @@ name the same binary.
 | `justfile` | `build` / `clean` / `rebuild`, and `verify` — the checks this repo's own `Verify` parameter runs, in one place instead of restated per shell. |
 | `main.go` | The wiring tool. Two flags, elevation-gated, idempotent. |
 | `elevate_windows.go`, `elevate_unix.go` | The consent gate per platform: an elevated token on Windows; on unix, uid 0 plus an immediate, verified drop back to the account behind `SUDO_UID`. |
-| `AGENTS.md` | Codex's entry point here, pointing at CLAUDE.md — the same stub the wiring tool writes into a repo that has none. |
+| `AGENTS.md` | Codex's entry point here, pointing at CLAUDE.md — the same stub the wiring tool writes into a repo that has none, naming whichever CLAUDE.md that repo uses. |
 
 Repo-specific knowledge lives in each repo, not here: the Loop parameters
 block in its CLAUDE.md, which the protocol reads and every handover copies
@@ -418,6 +419,18 @@ reason that beats the original.
   `GOOS=x cmd` or `set GOOS=x&& cmd` — and the parameter is one portable
   command. Which is the same principle one level up: the parameter names
   what must pass, not how one machine spells it.
+- **A repo may keep its CLAUDE.md in `.claude/`, and both locations load**:
+  `./CLAUDE.md` and `./.claude/CLAUDE.md` are equally valid project
+  instructions, and Claude Code reads both. The tool wrote to the repo root
+  unconditionally, so a repo that keeps its instructions in `.claude/` got a
+  SECOND file with its own Review loop block — the loop declared twice, in
+  two files that both load. Found in use rather than in review: the human hit
+  it, deleted the stray root file and moved the lines across by hand, and
+  only mentioned it in passing later. The tool now writes where the repo
+  already keeps its instructions — a file that is already wired wins, both
+  wired is refused rather than doubled, and otherwise `.claude/CLAUDE.md` is
+  preferred when it exists, because a repo that has one chose it
+  deliberately.
 - **A defensive rule that protects nothing can still break a platform**: the
   loop-directory validator refused a `~` anywhere but the first character.
   The error message it printed said the quiet part out loud — "the shell only
