@@ -21,19 +21,13 @@ the installed copy does not update itself.
 @protocol.md
 
 Loop parameters:
-- Verify: all four of these, and the tests must actually EXECUTE — half the
-  tool sits behind build tags, so vetting only the host build leaves the
-  tagged-out half to break silently:
-  1. `go vet ./...` — the host build.
-  2. `go vet ./...` with `GOOS=windows` — the `elevate_windows.go` half.
-  3. `go vet ./...` with `GOOS=darwin` — the `elevate_unix.go` half (`linux`
-     selects the same file, either will do).
-  4. `go test -count=1 ./...` — `-count=1` so no result is replayed.
-
-  Setting `GOOS` is the one shell-specific part, and this repo is worked on
-  from both kinds of machine: `GOOS=windows go vet ./...` in a POSIX shell,
-  `$env:GOOS='windows'; go vet ./...` in PowerShell (then `Remove-Item
-  Env:GOOS`). Name in the handover which form ran.
+- Verify: `just verify` — vets the host build AND both build-tagged halves
+  (half of `isElevated`/`dropPrivileges`/`invokingHome` is excluded by
+  whichever platform you are on, and the excluded half breaks silently),
+  then runs `go test -count=1 ./...` so nothing is replayed from the test
+  cache. One command on either machine: the justfile holds the checks and
+  the per-shell `GOOS` syntax, so this line does not restate them in the
+  syntax of whichever shell its author happened to be using.
 
   Plus reading every prose file the change touches and each file that
   references it (protocol ↔ roles ↔ README must not contradict each other).

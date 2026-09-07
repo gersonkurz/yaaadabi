@@ -53,13 +53,17 @@ over reading confidence, findings that can't get lost in transcripts.
    path is written into each wired repo's CLAUDE.md import line, and
    everything else is derived from it — which is also why different repos
    can use different instruction sets, see [Customizing](#customizing).
-2. Build the wiring tool once, inside the clone — `go build -o yaaadabi .`
-   on macOS and Linux, `go build -o yaaadabi.exe .` on Windows.
+2. Build the wiring tool once, inside the clone: `just build`, or plain
+   `go build` if you would rather not install [just](https://just.systems).
+   Either way you get `yaaadabi` on macOS and Linux and `yaaadabi.exe` on
+   Windows — `go build` names it per platform, so no `-o` is needed.
    Self-contained binary; the Go toolchain is only needed for this step.
    Building it *inside the clone* is what makes the zero-argument default
-   work: the binary looks for the prose files in its own directory.
-3. Requirements: Claude Code, and codex-cli on PATH — ≥ 0.151.0, last
-   exercised with 0.153.2 (macOS arm64, Homebrew).
+   work: the binary looks for the prose files in its own directory, which is
+   also why the justfile deliberately does not build into an `out/` dir.
+3. Requirements to USE it: Claude Code, and codex-cli on PATH — ≥ 0.151.0,
+   last exercised with 0.153.2 (macOS arm64, Homebrew). To BUILD it: Go.
+   To work on this repo itself: `just`, which its `Verify` parameter calls.
 
 The tool installs the user-level `/task` command itself; you only need to
 copy `commands/task.md` to `~/.claude/commands/task.md` by hand if you skip
@@ -111,7 +115,7 @@ Loop parameters:
 
 | Parameter | What it says | If you omit it |
 |---|---|---|
-| `Verify` | The commands that must be green before and after review, in the form whose tests actually **execute** — name the variant that defeats the runner's result cache (`go test -count=1 ./...`, not `go test ./...`), because a replayed green is not evidence. Compilation caches are fine. If the repo is worked on from more than one OS, name the checks rather than one shell's command string: see the field note below. | The agent resolves it from the repo's own docs and states that resolution in the handover; if the docs do not settle it, it asks you. |
+| `Verify` | The commands that must be green before and after review, in the form whose tests actually **execute** — name the variant that defeats the runner's result cache (`go test -count=1 ./...`, not `go test ./...`), because a replayed green is not evidence. Compilation caches are fine. If the repo is worked on from more than one OS, put the checks behind a task-runner recipe (`just verify`, a make target) so this line is one portable command rather than one shell's string — see the field note below. | The agent resolves it from the repo's own docs and states that resolution in the handover; if the docs do not settle it, it asks you. |
 | `Yardstick docs` | What defines "best" in this repo — the docs the reviewer judges against. | Same as above. |
 | `Review focus` | What this codebase is most at risk of. Violations there are `[blocking]`. | Same as above. |
 | `Task list` | Where deferred `[task]` findings go — a tracker project, an epic, a file. | `TODO.md` at the repo root, created if absent. |
@@ -250,6 +254,7 @@ name the same binary.
 | `developer.md` | Developer role: best-not-quickest, forced alternatives comparison, execution over reading, reporting discipline. |
 | `reviewer.md` | Reviewer role: judges approach AND correctness, `[blocking]`/`[suggestion]`/`[task]` tags, evidence weighting, `VERDICT:` contract. |
 | `commands/task.md` | The `/task` kickstart command (installed user-level, works in every wired repo). |
+| `justfile` | `build` / `clean` / `rebuild`, and `verify` — the checks this repo's own `Verify` parameter runs, in one place instead of restated per shell. |
 | `main.go` | The wiring tool. Two flags, elevation-gated, idempotent. |
 | `elevate_windows.go`, `elevate_unix.go` | The consent gate per platform: an elevated token on Windows; on unix, uid 0 plus an immediate, verified drop back to the account behind `SUDO_UID`. |
 | `AGENTS.md` | Codex's entry point here, pointing at CLAUDE.md — the same stub the wiring tool writes into a repo that has none. |
@@ -362,9 +367,14 @@ reason that beats the original.
   run by whichever machine picks the task up, so a parameter that only works
   in one shell is the same defect class as a hardcoded path — and this repo's
   review focus names exactly that. A Verify line for a repo built on more
-  than one OS should therefore name the CHECKS, with the shell-specific part
-  spelled out for each shell, rather than one string that happens to run
-  where its author was sitting.
+  than one OS should therefore name the CHECKS rather than one string that
+  happens to run where its author was sitting. Spelling each shell's syntax
+  out in the parameter was the first fix and it worked, but it restated in
+  prose what a task runner already solves; the checks now live in a
+  `just verify` recipe — `just`'s own `os()` conditional picks
+  `GOOS=x cmd` or `set GOOS=x&& cmd` — and the parameter is one portable
+  command. Which is the same principle one level up: the parameter names
+  what must pass, not how one machine spells it.
 - **macOS has no UAC, so the gate is `sudo` — with two consequences**:
   `geteuid() == 0` is the only in-process, unspoofable equivalent, and it is
   weaker than UAC in one specific way, because sudo's timestamp cache lets a
