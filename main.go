@@ -102,16 +102,25 @@ func validateEmitted(kind, v string) error {
 	if v == "" {
 		return fmt.Errorf("%s is empty", kind)
 	}
-	for i, r := range v {
+	for _, r := range v {
 		switch {
 		case r <= ' ' || r == 0x7f:
 			return fmt.Errorf("%s %q contains whitespace or a control character — it is interpolated unquoted into the review command and into a CLAUDE.md import, so it must not need quoting", kind, v)
 		case strings.ContainsRune("\"'`$&;|<>()[]{}*?!#\\^", r):
 			return fmt.Errorf("%s %q contains the shell metacharacter %q — it is interpolated unquoted into the review command, so it must not need quoting", kind, v, r)
-		case r == '~' && i != 0:
-			return fmt.Errorf("%s %q has a `~` that is not the leading one — the shell only expands a leading tilde, so this would be taken literally", kind, v)
 		}
 	}
+	// Only a LEADING tilde is expanded where this value is used, and only
+	// `~/` is the form this tool supports (`~user/` would expand to a path it
+	// never validated). A tilde INSIDE a path component is literal —
+	// measured in bash, zsh and sh, both as a bare word and inside an
+	// assignment — and forbidding it broke Windows, where 8.3 short names
+	// such as `C:/Users/GERSON~1/...` are ordinary paths. The narrow
+	// exception, which is why the rule is worded by position rather than by
+	// "anywhere": bash and zsh do expand a tilde immediately after `=` or `:`
+	// in an assignment (`V=/a:~/b`). This value is only ever interpolated as
+	// a word, and a tilde following a path separator is not that case.
+	// See the README field note.
 	if strings.HasPrefix(v, "~") && !strings.HasPrefix(v, "~/") {
 		return fmt.Errorf("%s %q starts with `~` but not `~/` — only the plain home form is supported", kind, v)
 	}

@@ -373,7 +373,6 @@ func TestValidateEmittedRejectsUnsafeValues(t *testing.T) {
 		"quote":               "/opt/\"loop\"",
 		"backslash":           "/opt/lo\\op",
 		"comment":             "/opt/loop#x",
-		"interior tilde":      "/opt/~loop",
 		"tilde not home":      "~user/loop",
 		"codex with args":     "codex --yolo",
 		"codex with subshell": "codex$(id)",
@@ -383,7 +382,13 @@ func TestValidateEmittedRejectsUnsafeValues(t *testing.T) {
 			t.Errorf("%s (%q): expected refusal, got none", name, v)
 		}
 	}
-	good := []string{"/Users/x/dev/yaaadabi", "~/dev/yaaadabi", "C:/Projects/yaaadabi", "codex", "codex-nightly", "/opt/homebrew/bin/codex", "/opt/münchen/yaaadabi", "/opt/loop-1.2+3", "/"}
+	good := []string{"/Users/x/dev/yaaadabi", "~/dev/yaaadabi", "C:/Projects/yaaadabi", "codex", "codex-nightly", "/opt/homebrew/bin/codex", "/opt/münchen/yaaadabi", "/opt/loop-1.2+3", "/",
+		// Windows 8.3 short names are ordinary paths and contain a tilde.
+		// `TMP` CAN carry one — on the machine where this surfaced it was
+		// `C:\Users\GERSON~1\AppData\Local\Temp` — so rejecting a tilde
+		// inside a path component made `go test` fail there, on a path the
+		// OS itself had handed us.
+		"C:/Users/GERSON~1/AppData/Local/Temp/clone", "C:/PROGRA~1/yaaadabi", "/opt/~loop"}
 	for _, v := range good {
 		if err := validateEmitted("value", v); err != nil {
 			t.Errorf("%q should be accepted: %v", v, err)

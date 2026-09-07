@@ -375,6 +375,29 @@ reason that beats the original.
   `GOOS=x cmd` or `set GOOS=x&& cmd` — and the parameter is one portable
   command. Which is the same principle one level up: the parameter names
   what must pass, not how one machine spells it.
+- **A defensive rule that protects nothing can still break a platform**: the
+  loop-directory validator refused a `~` anywhere but the first character.
+  The error message it printed said the quiet part out loud — "the shell only
+  expands a leading tilde, so this would be taken literally" — and literal is
+  CORRECT: a tilde inside a path component is left alone, measured in bash
+  3.2, zsh 5.9 and sh, both as a bare word and inside an assignment. So the
+  rule guarded against nothing. (Stated by position, not "anywhere", because
+  there is a real exception: bash and zsh DO expand a tilde immediately
+  after `=` or `:` in an assignment, so `V=/a:~/b` expands. The loop
+  directory is only ever interpolated as a word.) What the rule did do was
+  reject ordinary Windows paths: 8.3 short names contain a tilde, and `TMP`
+  can carry one — on the machine where this surfaced it was
+  `C:\Users\GERSON~1\AppData\Local\Temp`. Whether a given machine produces
+  such a path is its own configuration, which is the point: the validator
+  has to accept the shape rather than predict when it shows up. `go test`
+  failed on Windows inside `t.TempDir()`, on a path the OS itself had handed
+  us. Found by the first Windows run after the macOS port,
+  which is precisely why those commits kept saying "not executed on Windows"
+  rather than implying coverage they did not have: the disclosure is what got
+  it run. The surviving rule is the one that earns its keep — a LEADING `~`
+  must be `~/`, because `~user/` would expand to a path the tool never
+  validated. Reproducible off Windows, too: point `TMPDIR` at a directory
+  whose name contains `~1` and the same tests fail on a Mac.
 - **macOS has no UAC, so the gate is `sudo` — with two consequences**:
   `geteuid() == 0` is the only in-process, unspoofable equivalent, and it is
   weaker than UAC in one specific way, because sudo's timestamp cache lets a
